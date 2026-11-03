@@ -162,3 +162,6 @@ Running the fetcher against archive.org for the first time (`E2E_NET=1 npx vites
 
 ### Accessibility
 `npm run test:e2e` now includes an axe-core audit of every screen in light and dark (clean; it found and fixed four real issues). **A real VoiceOver/NVDA pass has still not been done** — see [docs/accessibility.md](docs/accessibility.md) for the exact script.
+
+### Installers & honest status
+`scripts/package-all.sh` produces `dist/Flacon-0.1.0-mac-{arm64,x64}.dmg` and `Flacon-0.1.0-win-{x64,arm64}-setup.exe` (+ zips). See [docs/packaging.md](docs/packaging.md). **Never executed: any Windows binary. Not done: code signing / notarization (no Apple Developer ID or Authenticode cert), a real update feed, a human VoiceOver/NVDA pass, update install/relaunch.** Planned features: [docs/roadmap.md](docs/roadmap.md).

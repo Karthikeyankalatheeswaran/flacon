@@ -25,7 +25,17 @@ missing, GPL, nonfree or lacks soxr. All four targets (darwin-arm64, darwin-x64,
 Point it at a feed with `-c.publish.url=https://updates.example.com/flacon` (or a GitHub provider) at package time.
 macOS auto-update requires a signed + notarized build.
 
-## Windows
-Windows x64 is prepared but **has never been run** (all work so far was on macOS). `scripts/build-ffmpeg-win.sh` (MSYS2 MINGW64) builds the same LGPL+soxr ffmpeg into `vendor/ffmpeg/win32-x64/`;
-the `release` CI job builds it, runs the gate, packages the NSIS installer and runs the E2E suite against `dist/win-unpacked/Flacon.exe`. Trigger it with `workflow_dispatch`; expect to fix first-run issues.
-arm64 (Windows and macOS x64) targets are removed from `electron-builder.yml` until their ffmpeg binaries exist. Unsigned NSIS installers trigger SmartScreen warnings.
+## Building every installer locally
+`scripts/package-all.sh [mac-arm64 mac-x64 win-x64 win-arm64]` (default: all four) builds all ffmpeg binaries it needs
+(`scripts/build-ffmpeg*.sh`), runs `check:ffmpeg:all`, swaps the Electron-ABI better-sqlite3 per target
+(`scripts/rebuild-native.mjs --platform --arch`), packages with electron-builder, and fails if `ffmpeg-static` (GPL) is inside any
+app.asar or the bundled ffmpeg is missing. Output in `dist/`:
+`Flacon-<v>-mac-{arm64,x64}.{dmg,zip}`, `Flacon-<v>-win-{x64,arm64}-setup.exe`. Windows icon/version resources are edited in pure JS
+(`resedit`, `build/afterPack.cjs`) so no wine is needed. Without signing credentials macOS builds are ad-hoc signed
+(`npm run check:signing -- --verify` reports this honestly: Gatekeeper rejects, not notarized).
+
+## Status of each platform (honest)
+- macOS arm64: packaged app launched from the DMG; 20 E2E tests + axe pass.
+- macOS x64: packaged app passes the app E2E suite under Rosetta.
+- Windows x64/arm64: installers build and were inspected (correct-arch Flacon.exe, ffmpeg.exe, better_sqlite3.node; icon/version set) but **no Windows binary has ever been executed**. The `release` CI job (windows-latest) installs-and-tests it; run it via `workflow_dispatch` and expect first-run fixes. Unsigned NSIS installers trigger SmartScreen.
+- Signing/notarization: not done (needs an Apple Developer ID and an Authenticode certificate). No update feed is configured; the update flow was verified against a local feed through "update ready" only (install/relaunch needs a signed build).

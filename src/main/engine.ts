@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs'
+import { createRequire } from 'node:module'
 import { join } from 'node:path'
 import { app, BrowserWindow, MessageChannelMain, utilityProcess, type UtilityProcess } from 'electron'
-import ffmpegPath from 'ffmpeg-static'
 import { Channels } from '@shared/ipc'
 import { cueRealPath, isCuePath } from '@shared/cue'
 import { PlaybackCommandSchema, type PlaybackCommand, type TrackRef } from '@shared/playback'
@@ -11,6 +11,15 @@ let win: BrowserWindow | null = null
 let decoder: UtilityProcess | null = null
 let ready = false
 const backlog: Array<PlaybackCommand | { type: 'resume-context' }> = []
+
+/** GPL ffmpeg-static is a dev-only fallback and is excluded from packaged builds, so it must be loaded lazily and may be absent. */
+function devFfmpeg(): string {
+  try {
+    return (createRequire(join(app.getAppPath(), 'package.json'))('ffmpeg-static') as string | null) ?? ''
+  } catch {
+    return ''
+  }
+}
 
 const exe = process.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg'
 
@@ -25,7 +34,7 @@ export function resolveFfmpeg(): { path: string; soxr: boolean } {
     ? join(process.resourcesPath, 'ffmpeg', exe)
     : join(__dirname, '..', '..', 'vendor', 'ffmpeg', `${process.platform}-${process.arch}`, exe)
   if (existsSync(bundled)) return { path: bundled, soxr: true }
-  return { path: (ffmpegPath ?? '').replace('app.asar', 'app.asar.unpacked'), soxr: false }
+  return { path: devFfmpeg(), soxr: false }
 }
 
 function spawnDecoder(): void {

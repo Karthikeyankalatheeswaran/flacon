@@ -8,7 +8,11 @@ directories:
 files:
   - out/**
   - package.json
+  # The GPL dev-only ffmpeg must never ship: only the bundled LGPL build in extraResources may.
+  - "!node_modules/ffmpeg-static/**"
+  - "!**/*.map"
 asar: true
+afterPack: build/afterPack.cjs
 # Bundled LGPL ffmpeg + libsoxr for the target platform (build with scripts/build-ffmpeg.sh). ffmpeg-static is dev-only.
 # Native/binary assets must live outside the asar: the OS loads .node files and spawns ffmpeg from real paths.
 asarUnpack:
@@ -27,13 +31,13 @@ fileAssociations:
   - { ext: opus, name: Opus audio, role: Viewer }
   - { ext: dsf, name: DSD audio, role: Viewer }
 mac:
+  artifactName: "${productName}-${version}-mac-${arch}.${ext}"
   extraResources:
     - { from: "vendor/ffmpeg/darwin-${arch}", to: ffmpeg }
   category: public.app-category.music
   target:
-    # x64 needs vendor/ffmpeg/darwin-x64 built on an Intel Mac first (docs/packaging.md); add it here once it exists.
-    - { target: dmg, arch: [arm64] }
-    - { target: zip, arch: [arm64] }
+    - { target: dmg, arch: [arm64, x64] }
+    - { target: zip, arch: [arm64, x64] }
   hardenedRuntime: true
   gatekeeperAssess: false
   entitlements: build/entitlements.mac.plist
@@ -44,12 +48,16 @@ mac:
     LSUIElement: false
   # identity / notarize are supplied by CI (-c.mac.identity, -c.mac.notarize=true); unsigned local builds just skip them.
 win:
+  icon: build/icon.ico
+  # Editing the exe (icon/version) normally needs wine off Windows; build/afterPack.cjs does it in pure JS instead.
+  signAndEditExecutable: false
   extraResources:
     - { from: "vendor/ffmpeg/win32-${arch}", to: ffmpeg }
   target:
-    # arm64 needs vendor/ffmpeg/win32-arm64 (not built yet).
-    - { target: nsis, arch: [x64] }
+    - { target: nsis, arch: [x64, arm64] }
 nsis:
+  buildUniversalInstaller: false
+  artifactName: "${productName}-${version}-win-${arch}-setup.${ext}"
   oneClick: false
   perMachine: false
   allowToChangeInstallationDirectory: true

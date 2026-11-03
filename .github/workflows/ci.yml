@@ -69,3 +69,41 @@ jobs:
             dist/*.dmg
             dist/*.zip
             dist/*.exe
+
+  # Builds all four installers from one macOS runner (what scripts/package-all.sh does locally).
+  installers:
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    needs: test
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: brew install libsoxr cmake nasm llvm-mingw
+      - run: npm ci
+      - run: scripts/package-all.sh
+        env:
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      - uses: actions/upload-artifact@v4
+        with: { name: flacon-installers, path: "dist/*.dmg\ndist/*.zip\ndist/*.exe" }
+
+  # Installs the real NSIS setup silently on Windows and runs the E2E suite against it.
+  windows-installed:
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    needs: installers
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - uses: actions/download-artifact@v4
+        with: { name: flacon-installers, path: dist }
+      - shell: bash
+        run: |
+          ./dist/Flacon-*-win-x64-setup.exe /S
+          E2E_APP="$LOCALAPPDATA/Programs/Flacon/Flacon.exe" npx vitest run --config vitest.e2e.config.ts
