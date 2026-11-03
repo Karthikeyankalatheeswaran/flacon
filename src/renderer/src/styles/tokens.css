@@ -1,0 +1,103 @@
+/* Design tokens — Direction C "Instrument" handoff (board C3). Names mirror components.
+   Only the colour layer swaps between themes; --tint is set per record at runtime. */
+:root,
+[data-theme='light'] {
+  --bg: #f2f2ef;
+  --sheet: #ffffff;
+  --well: #e6e6e2;
+  --ink: #141413;
+  --ink-2: rgb(20 20 19 / 0.6);
+  --rule: rgb(20 20 19 / 0.14);
+  --rule-2: rgb(20 20 19 / 0.07);
+  --hover: rgb(20 20 19 / 0.05);
+  --ok: #1e7f44;
+  --warn: #9a6200;
+  --err: #c4271d;
+  --tint: #13303a;
+  --tint-ink: #13303a; /* tint as text/line on paper */
+
+  --font-ui: Archivo, system-ui, -apple-system, 'Segoe UI Variable', sans-serif;
+  --radius-sleeve: 2px;
+  --radius-control: 6px;
+  --radius-popover: 8px;
+  --radius-touched: 999px;
+
+  --shell-titlebar: 52px;
+  --shell-content-top: 72px;
+  --shell-rail: 200px;
+  --shell-vessel: 336px;
+  --shell-inset: 32px;
+
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --spring-island: linear(0, 0.067, 0.215, 0.39, 0.557, 0.7, 0.813, 0.896, 0.953, 0.989, 1.01, 1.02, 1.023, 1.021, 1.018, 1.014, 1.01, 1.007, 1.004, 1.003, 1.001, 1, 1);
+  --dur-island: 480ms;
+  --dur-tint: 600ms;
+  --dur-reduced: 150ms;
+}
+
+[data-theme='dark'] {
+  --bg: #111211;
+  --sheet: #1b1c1b;
+  --well: #262725;
+  --ink: #ededE8;
+  --ink-2: rgb(237 237 232 / 0.62);
+  --rule: rgb(237 237 232 / 0.14);
+  --rule-2: rgb(237 237 232 / 0.07);
+  --hover: rgb(237 237 232 / 0.05);
+  --ok: #5bc27e;
+  --warn: #e3b35a;
+  --err: #ff7a6e;
+  --tint-ink: #7fb7c9; /* lifted for graphite */
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-island: var(--dur-reduced);
+    --spring-island: ease-out;
+  }
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font: 400 15px/21px var(--font-ui);
+  font-variant-numeric: tabular-nums; /* all numbers */
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+  overflow: hidden;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+}
+
+/* Focus: ink/chalk, 2 + 2 (tint can be dark, so focus uses the highest-contrast ink). */
+:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+/* Type scale (tokens.json › type) */
+.t-readout { font-stretch: 125%; font-weight: 300; font-size: 40px; line-height: 40px; letter-spacing: -0.03em; }
+.t-display { font-stretch: 112%; font-weight: 650; font-size: 40px; line-height: 44px; letter-spacing: -0.02em; }
+.t-title { font-stretch: 100%; font-weight: 600; font-size: 17px; line-height: 22px; }
+.t-label { font-stretch: 75%; font-weight: 500; font-size: 12px; line-height: 16px; }
+.ink-2 { color: var(--ink-2); }
+
+@media (forced-colors: active) {
+  :root, [data-theme] { --ink: CanvasText; --ink-2: GrayText; --rule: CanvasText; --bg: Canvas; --sheet: Canvas; }
+}
