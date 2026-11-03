@@ -75,6 +75,9 @@ export function SettingsPage(): JSX.Element {
           <Row label="ReplayGain" hint="Levels loud and quiet records using the gain tags in your files. Songs without tags play untouched; nothing is ever boosted into clipping.">
             <Seg label="ReplayGain" value={settings?.replayGain ?? 'off'} options={[['off', 'Off'], ['track', 'Track']]} onChange={(v) => void update({ replayGain: v })} />
           </Row>
+          <Row label="Crossfade" hint="Overlaps the end of one song with the start of the next. Off keeps playback gapless with no fade. Skipping or seeking never crossfades.">
+            <Seg label="Crossfade" value={String(settings?.crossfade ?? 0)} options={[['0', 'Off'], ['3', '3 s'], ['6', '6 s'], ['10', '10 s']]} onChange={(v) => void update({ crossfade: Number(v) })} />
+          </Row>
           <Row label="Purity measuring" hint="Flacon decodes a short sample of every lossless song in the background to see how much of its frequency range is real. Nothing leaves your computer.">
             <span className="t-label ink-2" role="status">{analysis.total > analysis.done ? `${analysis.done.toLocaleString()} of ${analysis.total.toLocaleString()}` : 'Up to date'}</span>
           </Row>

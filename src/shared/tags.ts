@@ -100,8 +100,8 @@ export function hueTint(key: string): string {
   let h = 2166136261
   for (let i = 0; i < key.length; i++) h = Math.imul(h ^ key.charCodeAt(i), 16777619)
   const hue = (h >>> 0) % 360
-  // HSL(hue, 28%, 22%) → hex; dark and low chroma so it passes the 4.5:1 guard against chalk.
-  const s = 0.28, l = 0.22
+  // HSL(hue, 13%, 16%) → hex; near-graphite with only a whisper of the album's hue, so the player stays calm and passes the 4.5:1 guard against chalk.
+  const s = 0.13, l = 0.16
   const k = (n: number): number => (n + hue / 30) % 12
   const a = s * Math.min(l, 1 - l)
   const f = (n: number): number => l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)))

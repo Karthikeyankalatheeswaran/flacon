@@ -15,8 +15,8 @@
   --warn: #8f5600;
   --err: #b8261b;
   --accent: #bf3a10;
-  --tint: #13303a;
-  --tint-ink: #13303a; /* tint as text/line on paper */
+  --tint: #1d1e22; /* graphite: the player panel's resting colour; albums lend it a faint hue */
+  --tint-ink: #2a2b31; /* tint as text/line on paper */
 
   --font-ui: 'Archivo Variable', Archivo, system-ui, -apple-system, 'Segoe UI Variable', sans-serif;
   --radius-sleeve: 2px;
@@ -51,7 +51,8 @@
   --warn: #e8b45c;
   --err: #ff7f72;
   --accent: #ff8a5c;
-  --tint-ink: #86bfd1; /* lifted for graphite */
+  --tint-ink: #c4bfb3; /* lifted for graphite */
+  --tint: #17181c;
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -44,7 +44,8 @@ export const PlaybackCommandSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('clear') }),
   z.object({ type: z.literal('shuffle'), on: z.boolean() }),
   z.object({ type: z.literal('repeat'), mode: z.enum(['off', 'all', 'one']) }),
-  z.object({ type: z.literal('replayGain'), mode: z.enum(['off', 'track']) })
+  z.object({ type: z.literal('replayGain'), mode: z.enum(['off', 'track']) }),
+  z.object({ type: z.literal('crossfade'), seconds: z.number().min(0).max(10) })
 ])
 export type PlaybackCommand = z.infer<typeof PlaybackCommandSchema>
 

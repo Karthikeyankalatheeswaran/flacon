@@ -109,7 +109,7 @@ function settingsInfo(): AppSettingsInfo {
   const s = settings.get()
   return {
     launchAtLogin: s.launchAtLogin, pauseOnSuspend: s.pauseOnSuspend, updateChecks: s.updateChecks, islandEdge: s.islandEdge, onboarded: s.onboarded,
-    islandEnabled: s.islandEnabled, islandMode: s.islandMode, islandSize: s.islandSize, islandArt: s.islandArt, islandBadge: s.islandBadge, replayGain: s.replayGain, showLyrics: s.showLyrics,
+    islandEnabled: s.islandEnabled, islandMode: s.islandMode, islandSize: s.islandSize, islandArt: s.islandArt, islandBadge: s.islandBadge, replayGain: s.replayGain, crossfade: s.crossfade, showLyrics: s.showLyrics,
     recovered: settings.recoveredFrom !== null, canLaunchAtLogin: app.isPackaged, platform: process.platform as AppState['platform']
   }
 }
@@ -377,6 +377,7 @@ function registerIpc(): void {
     if (patch.islandEdge !== undefined && islandWin && !islandWin.isDestroyed()) placeIsland(islandWin, patch.islandEdge)
     if (patch.islandEnabled !== undefined) syncIsland()
     if (patch.replayGain !== undefined) dispatch({ type: 'replayGain', mode: patch.replayGain })
+    if (patch.crossfade !== undefined) dispatch({ type: 'crossfade', seconds: patch.crossfade })
     const info = settingsInfo()
     for (const w of uiWindows()) w.webContents.send(Channels.settingsChanged, info)
     forceMenu(menuDeps)
@@ -397,11 +398,11 @@ function registerIpc(): void {
   })
   ipcMain.handle(Channels.fetchSearch, (_e, raw: unknown) => {
     const q = FetchSearchSchema.parse(raw)
-    return fetchSearch(q.provider, q.query)
+    return fetchSearch(q.provider, q.query, q.quality)
   })
   ipcMain.handle(Channels.fetchEnqueue, (_e, raw: unknown) => {
     const p = FetchPickSchema.parse(raw)
-    return fetchEnqueue(p.provider, p.id)
+    return fetchEnqueue(p.provider, p.id, p.quality)
   })
   ipcMain.on(Channels.fetchControl, (_e, raw: unknown) => {
     const c = FetchControlSchema.safeParse(raw)
@@ -550,6 +551,7 @@ if (!app.requestSingleInstanceLock()) {
     dispatch({ type: 'shuffle', on: settings.get().shuffle })
     dispatch({ type: 'repeat', mode: settings.get().repeat })
     dispatch({ type: 'replayGain', mode: settings.get().replayGain })
+    dispatch({ type: 'crossfade', seconds: settings.get().crossfade })
     restoreSession()
     mainWin = makeMainWindow(launchedHidden())
     startUpdater((st) => uiWindows().forEach((w) => w.webContents.send(Channels.updateState, st)), () => settings.get().updateChecks)

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { HostLimiter } from '@shared/fetch'
 import type { FetchFn } from './download'
-import { archive, jamendo, link, parseLicense, type ProviderCtx } from './providers'
+import { archive, archiveCandidate, chooseFiles, commons, jamendo, link, parseLicense, type Candidate, type ProviderCtx } from './providers'
 
 const json = (body: unknown, status = 200): Response => new Response(JSON.stringify(body), { status })
 const ctx = (fn: FetchFn, extra: Partial<ProviderCtx> = {}): ProviderCtx => ({ fetchFn: fn, limiter: new HostLimiter(0), signal: new AbortController().signal, sleep: async () => {}, ...extra })
@@ -32,13 +32,13 @@ describe('archive.org', () => {
   it('resolves to FLAC files only, with encoded download URLs and the licence', async () => {
     const meta = { metadata: { title: 'Good Album', creator: 'The Band', licenseurl: 'https://creativecommons.org/licenses/by/4.0/' }, files: [
       { name: 'a b/01 One.flac', format: 'Flac', size: '1234', title: 'One' }, { name: '01 One.mp3', format: 'VBR MP3' }, { name: 'cover.jpg', format: 'JPEG' } ] }
-    const items = await archive.resolve('good-album', ctx(async () => json(meta)))
+    const items = await archive.resolve('good-album', ctx(async () => json(meta), { quality: 'lossless' }))
     expect(items).toHaveLength(1)
     expect(items[0]).toMatchObject({ url: 'https://archive.org/download/good-album/a%20b/01%20One.flac', size: 1234, album: 'Good Album', license: { name: 'CC BY 4.0' } })
   })
   it('refuses items with no licence or no FLAC', async () => {
     await expect(archive.resolve('x', ctx(async () => json({ metadata: {}, files: [] })))).rejects.toThrow(/licence/)
-    await expect(archive.resolve('x', ctx(async () => json({ metadata: { licenseurl: 'https://creativecommons.org/publicdomain/zero/1.0/' }, files: [] })))).rejects.toThrow(/no FLAC/)
+    await expect(archive.resolve('x', ctx(async () => json({ metadata: { licenseurl: 'https://creativecommons.org/publicdomain/zero/1.0/' }, files: [] }), { quality: 'lossless' }))).rejects.toThrow(/no FLAC/)
   })
   it('turns network failure, 429 and bad JSON into friendly errors', async () => {
     await expect(archive.search('a', ctx(async () => { throw new TypeError('fetch failed') }))).rejects.toThrow(/connection/)
@@ -75,5 +75,51 @@ describe('paste link', () => {
     await expect(link.search('https://192.168.1.5/x.flac', ctx(async () => json({})))).rejects.toThrow(/local/)
     await expect(link.search('https://a.com/page.html', ctx(async () => json({})))).rejects.toThrow(/lossless/)
     await expect(link.search('hello', ctx(async () => json({})))).rejects.toThrow(/link/)
+  })
+})
+
+describe('quality choice', () => {
+  const files = [
+    { name: 't1.flac', format: 'Flac', original: 't1.wav' }, { name: 't1_vbr.mp3', format: 'VBR MP3', original: 't1.wav' }, { name: 't1_64kb.mp3', format: '64Kbps MP3', original: 't1.wav' },
+    { name: 't2_vbr.mp3', format: 'VBR MP3', original: 't2.wav' }, { name: 't2.ogg', format: 'Ogg Vorbis', original: 't2.wav' }, { name: 'cover.jpg', format: 'JPEG' }
+  ]
+  const cands = files.flatMap((f) => archiveCandidate(f) ?? []) as Candidate[]
+  it('best: lossless where a track has it, else the best lossy', () => {
+    expect(chooseFiles(cands, 'best').map((c) => c.name).sort()).toEqual(['t1.flac', 't2_vbr.mp3'])
+  })
+  it('lossless: only FLAC, tracks without it are skipped', () => {
+    expect(chooseFiles(cands, 'lossless').map((c) => c.name)).toEqual(['t1.flac'])
+  })
+  it('compact: prefers VBR MP3 over low-bitrate MP3 and Ogg, never FLAC', () => {
+    expect(chooseFiles(cands, 'compact').map((c) => c.name).sort()).toEqual(['t1_vbr.mp3', 't2_vbr.mp3'])
+  })
+  it('archive.resolve reports a clear reason when the quality has nothing', async () => {
+    const meta = { metadata: { licenseurl: 'https://creativecommons.org/licenses/by/4.0/', title: 'A' }, files: [{ name: 'a_vbr.mp3', format: 'VBR MP3' }] }
+    await expect(archive.resolve('item', ctx(async () => json(meta), { quality: 'lossless' }))).rejects.toThrow(/no FLAC/)
+    const ok = await archive.resolve('item', ctx(async () => json(meta), { quality: 'best' }))
+    expect(ok[0]).toMatchObject({ format: 'mp3' })
+  })
+})
+
+describe('wikimedia commons', () => {
+  const page = (title: string, license: Record<string, string>, host = 'upload.wikimedia.org') => ({ title, index: 1, imageinfo: [{ url: `https://${host}/x/${encodeURIComponent(title)}`, size: 1000, extmetadata: { ...Object.fromEntries(Object.entries(license).map(([k, v]) => [k, { value: v }])), Artist: { value: '<a href="x">Ann &amp; Bo</a>' }, ObjectName: { value: 'Prelude' } } }] })
+  const body = { query: { pages: {
+    '1': page('File:a.ogg', { LicenseShortName: 'CC BY-SA 4.0', LicenseUrl: 'https://creativecommons.org/licenses/by-sa/4.0' }),
+    '2': page('File:b.flac', { LicenseShortName: 'Public domain' }),
+    '3': page('File:c.ogg', { LicenseShortName: 'All rights reserved' }),
+    '4': page('File:d.ogg', { LicenseShortName: 'CC0' }, 'evil.example.com'),
+    '5': page('File:e.jpg', { LicenseShortName: 'CC0' })
+  } } }
+  it('lists only audio with a known licence on the expected host, with clean credits', async () => {
+    const r = await commons.search('bach', ctx(async () => json(body)))
+    expect(r.map((x) => x.id).sort()).toEqual(['File:a.ogg', 'File:b.flac'])
+    expect(r.find((x) => x.id === 'File:a.ogg')).toMatchObject({ title: 'Prelude', artist: 'Ann & Bo', license: { name: 'CC BY-SA 4.0' } })
+  })
+  it('quality filters by encoding', async () => {
+    expect((await commons.search('x', ctx(async () => json(body), { quality: 'lossless' }))).map((x) => x.id)).toEqual(['File:b.flac'])
+    expect((await commons.search('x', ctx(async () => json(body), { quality: 'compact' }))).map((x) => x.id)).toEqual(['File:a.ogg'])
+  })
+  it('rejects malformed ids', async () => {
+    await expect(commons.resolve('https://evil', ctx(async () => json(body)))).rejects.toThrow(/Bad file id/)
   })
 })

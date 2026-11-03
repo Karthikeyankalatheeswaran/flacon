@@ -146,6 +146,10 @@ export class HostLimiter {
 
 // ---- Jobs ----------------------------------------------------------------------------------------
 
+/** Audio quality the user asks for: the best file each source has, lossless only, or a compact lossy copy (MP3 first). */
+export const QUALITIES = ['best', 'lossless', 'compact'] as const
+export type Quality = (typeof QUALITIES)[number]
+
 export const LicenseSchema = z.object({ name: z.string().max(120), url: z.string().url().max(500).optional(), attribution: z.string().max(300).optional() })
 export type License = z.infer<typeof LicenseSchema>
 
@@ -153,7 +157,7 @@ export const JobStatusSchema = z.enum(['queued', 'downloading', 'verifying', 'im
 export type JobStatus = z.infer<typeof JobStatusSchema>
 
 export const FetchItemSchema = z.object({
-  provider: z.enum(['archive', 'jamendo', 'link']),
+  provider: z.enum(['archive', 'commons', 'jamendo', 'link']),
   title: z.string().min(1).max(300),
   artist: z.string().max(300).default(''),
   album: z.string().max(300).default(''),

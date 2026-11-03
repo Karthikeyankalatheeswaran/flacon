@@ -36,6 +36,23 @@ export class PcmRing {
     this.readPos += n
     return n
   }
+  /**
+   * Equal-power crossfade: blend `n` interleaved frames of a new track into audio already buffered at absolute
+   * position `abs`. `done` of `len` frames of the fade have been mixed before this call. Frames whose slot was
+   * already played are skipped. Returns frames processed (always n).
+   */
+  mixAt(abs, src, n, done, len) {
+    for (let i = 0; i < n; i++) {
+      const pos = abs + i
+      if (pos < this.readPos || pos >= this.writePos) continue
+      const t = (done + i + 0.5) / len
+      const fo = Math.cos((t * Math.PI) / 2)
+      const fi = Math.sin((t * Math.PI) / 2)
+      const idx = pos % this.capacity
+      for (let c = 0; c < this.channels; c++) this.data[c][idx] = this.data[c][idx] * fo + src[i * this.channels + c] * fi
+    }
+    return n
+  }
   /** Drop everything buffered (seek / stop). */
   flush() {
     this.readPos = this.writePos
@@ -61,15 +78,26 @@ if (typeof registerProcessor !== 'undefined') {
       this.flushAfterFade = false
       this.flushAt = 0
       this.ended = false
+      this.xfFrames = 0 // configured crossfade length in frames (0 = off)
+      this.xf = null // crossfade in progress: {start, len, done, trackId}
       this.reportAt = 0
       this.port.onmessage = (e) => this.onMessage(e.data)
     }
     onMessage(m) {
       switch (m.type) {
-        case 'chunk':
-          if (m.first) this.marks.push({ at: this.ring.writePos + this.pendingFrames(), trackId: m.trackId, startSec: m.startSec })
-          this.pending.push({ samples: new Float32Array(m.data), frames: m.frames, offset: 0 })
+        case 'chunk': {
+          if (m.first) {
+            const xf = this.planCrossfade(m.trackId)
+            if (xf) this.xf = xf
+            // With a crossfade the new track begins where the fade begins, inside the old track's buffered tail.
+            this.marks.push({ at: xf ? xf.start : this.ring.writePos + this.pendingFrames(), trackId: m.trackId, startSec: m.startSec })
+          }
+          this.pending.push({ samples: new Float32Array(m.data), frames: m.frames, offset: 0, trackId: m.trackId })
           this.drain()
+          break
+        }
+        case 'crossfade':
+          this.xfFrames = Math.max(0, Math.round(m.seconds * sampleRate))
           break
         case 'play':
           this.playing = true
@@ -83,6 +111,7 @@ if (typeof registerProcessor !== 'undefined') {
           // Everything written so far is stale; audio written AFTER this point belongs to the new stream, which
           // may already be decoding while the 10 ms fade runs, so the flush must not touch it.
           this.pending.length = 0
+          this.xf = null
           this.flushAt = this.ring.writePos
           if (this.playing) {
             this.startFade(-1)
@@ -96,8 +125,28 @@ if (typeof registerProcessor !== 'undefined') {
     }
     pendingFrames() {
       let n = 0
-      for (const p of this.pending) n += p.frames - p.offset
+      let mixLeft = this.xf ? this.xf.len - this.xf.done : 0 // frames that will blend into the buffer instead of extending it
+      for (const p of this.pending) {
+        let rem = p.frames - p.offset
+        if (this.xf && p.trackId === this.xf.trackId) {
+          const m = Math.min(rem, mixLeft)
+          mixLeft -= m
+          rem -= m
+        }
+        n += rem
+      }
       return n
+    }
+    /** Crossfade only a natural track change: playing, nothing queued behind the ring, and enough of the old track still unplayed. */
+    planCrossfade(trackId) {
+      if (!this.xfFrames || !this.playing || !this.current || this.xf || this.flushAfterFade || this.pending.length) return null
+      const guard = Math.round(sampleRate * 0.25)
+      const aStart = this.marks.length ? this.marks[this.marks.length - 1].at : this.current.at
+      let len = Math.min(this.xfFrames, this.ring.buffered - guard, Math.floor((this.ring.writePos - aStart) / 2))
+      if (len < Math.round(sampleRate * 0.5)) return null
+      const start = this.ring.writePos - len
+      if (start < this.flushAt || start <= this.ring.readPos) return null
+      return { start, len, done: 0, trackId }
     }
     startFade(dir) {
       this.fade = dir
@@ -105,18 +154,31 @@ if (typeof registerProcessor !== 'undefined') {
     }
     /** Drop buffered audio written before `at`, keeping the new stream's audio and track marks (a mark at/after `at`). */
     flushTo(at) {
+      this.xf = null
       if (at > this.ring.readPos) this.ring.readPos = at
       this.marks = this.marks.filter((m) => m.at >= at)
       this.current = null
     }
     hardFlush() {
+      this.xf = null
       this.ring.flush()
       this.marks.length = 0
       this.current = null
     }
     drain() {
-      while (this.pending.length && this.ring.free > 0) {
+      while (this.pending.length) {
         const p = this.pending[0]
+        if (this.xf && p.trackId === this.xf.trackId) {
+          const n = Math.min(p.frames - p.offset, this.xf.len - this.xf.done)
+          this.ring.mixAt(this.xf.start + this.xf.done, p.samples.subarray(p.offset * 2), n, this.xf.done, this.xf.len)
+          p.offset += n
+          this.xf.done += n
+          this.port.postMessage({ type: 'overlap', trackId: p.trackId, frames: n }) // these frames never occupy ring space
+          if (this.xf.done >= this.xf.len) this.xf = null
+          if (p.offset >= p.frames) this.pending.shift()
+          continue
+        }
+        if (this.ring.free <= 0) break
         const view = p.samples.subarray(p.offset * 2)
         const n = this.ring.writeInterleaved(view, p.frames - p.offset)
         p.offset += n

@@ -30,4 +30,26 @@ describe('PcmRing', () => {
     ring.flush()
     expect(ring.buffered).toBe(0)
   })
+
+  it('mixAt blends with equal power and skips slots that were already played', () => {
+    const ring = new PcmRing(1, 16)
+    ring.writeInterleaved(new Float32Array(8).fill(1), 8) // old track's tail
+    const incoming = new Float32Array(8).fill(1)
+    ring.mixAt(0, incoming, 8, 0, 8)
+    const out = [new Float32Array(8)]
+    ring.read(out, 8)
+    // equal power on correlated 1.0 signals: cos+sin peaks near sqrt(2) mid-fade and returns to 1 at the ends
+    expect(out[0]![0]!).toBeLessThan(1.15)
+    expect(out[0]![3]!).toBeGreaterThan(1.3)
+    expect(out[0]![7]!).toBeLessThan(1.15)
+    // already-played slots are left alone
+    const r2 = new PcmRing(1, 8)
+    r2.writeInterleaved(new Float32Array(4).fill(0.5), 4)
+    r2.read([new Float32Array(2)], 2)
+    r2.mixAt(0, new Float32Array(4).fill(1), 4, 0, 4)
+    const o2 = [new Float32Array(2)]
+    r2.read(o2, 2)
+    expect(o2[0]![0]!).not.toBe(0.5) // slot 2 and 3 were mixed
+    expect(r2.readPos).toBe(4)
+  })
 })

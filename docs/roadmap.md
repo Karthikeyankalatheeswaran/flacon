@@ -7,7 +7,9 @@ Size: S ≈ days, M ≈ 1–2 weeks, L ≈ a month+.
 ## Status (update: v0.2 work)
 **Built:** playlists (create/rename/delete, drag-reorder, M3U/M3U8 import + export), play queue (Up Next: add next/last, jump, remove, drag-reorder, clear), favourites and 1–5 ratings (stored), smart lists as "Blends" (Favourites, Recently played, Most played, Recently added, Verified pure, Added this month, To review), play counts and history (a play counts after 30 s or half the track), shuffle and repeat (off/all/one), ReplayGain (track mode, never clips), lyrics (`.lrc` sidecar or embedded, synced highlight), Home ("Tonight") shelves, Listening stats, native app menu with Settings (⌘,) and keyboard shortcuts, redesigned Flacon Island with settings, and **purity**: a measured percentage of each lossless file's frequency range that holds real signal, shown on every song, album and in the player.
 
-**Not built (still on the list):** crossfade, tag editor, MusicBrainz / cover-art lookup, scrobbling, media keys / Now Playing / SMTC, radio / similar-to-this, daily mixes, output-device picker and exclusive mode, casting, mobile remote, DSD, parametric EQ, star-rating UI (ratings are stored, only hearts are in the UI). Podcasts and internet radio were deliberately left out.
+**Also built since:** crossfade (0/3/6/10 s, natural track changes only), audio-quality choice on Fetch (best / lossless only / compact MP3), Wikimedia Commons as a free source, island close button, graphite player palette.
+
+**Not built (still on the list):** tag editor, MusicBrainz / cover-art lookup, scrobbling, media keys / Now Playing / SMTC, radio / similar-to-this, daily mixes, output-device picker and exclusive mode, casting, mobile remote, DSD, parametric EQ, star-rating UI (ratings are stored, only hearts are in the UI). Podcasts and internet radio were deliberately left out.
 
 ## Tier 1 — core listening
 | Feature | Notes | Size |

@@ -3,8 +3,8 @@ html, body, #root { background: transparent; }
 .isl-stage { position: fixed; inset: 0; display: flex; justify-content: center; align-items: flex-start; padding-top: 8px; }
 .isl { position: relative; overflow: hidden; background: #000; color: #ededE8; cursor: default; user-select: none; box-shadow: 0 0 0 .5px rgb(255 255 255 / .14), 0 10px 30px rgb(0 0 0 / .35); font-family: var(--font-ui); }
 /* Invisible, larger hit area so the 8 px dot is reachable. */
-.isl-dot { position: absolute; inset: 0; background: rgb(237 237 232 / .5); }
-.isl-dot::after { content: ''; position: absolute; inset: -14px -22px; }
+.isl-pip { position: absolute; inset: 0; background: rgb(237 237 232 / .5); }
+.isl-pip::after { content: ''; position: absolute; inset: -14px -22px; }
 .isl-liquid { position: absolute; left: 0; bottom: 0; height: 100%; transition: background-color 600ms ease-in-out; pointer-events: none; }
 .isl-row { position: relative; display: flex; align-items: center; gap: 10px; height: 100%; padding: 0 7px 0 7px; }
 .isl-row.tall { height: auto; padding: 16px 16px 0; align-items: flex-start; gap: 14px; }
@@ -35,3 +35,6 @@ html, body, #root { background: transparent; }
 .isl-bars.on i:nth-child(3) { animation-delay: -600ms; animation-duration: 1100ms; }
 @keyframes isl-eq { from { height: 3px; } to { height: 14px; } }
 @media (prefers-reduced-motion: reduce) { .isl-bars.on i { animation: none; height: 8px; } }
+
+.isl-close { width: 26px; height: 26px; color: rgb(237 237 232 / .6); }
+.isl-close:hover { color: #fff; }

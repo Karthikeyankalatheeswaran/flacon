@@ -4,7 +4,7 @@ import { app } from 'electron'
 import chokidar, { type FSWatcher } from 'chokidar'
 import yauzl from 'yauzl'
 import type { FetchJob } from '@shared/fetch'
-import { HostLimiter } from '@shared/fetch'
+import { HostLimiter, type Quality } from '@shared/fetch'
 import { FetchSettingsSchema, defaultFetchSettings, type EnqueueResponse, type FetchSettings, type SearchResponse } from '@shared/fetchIpc'
 import { z } from 'zod'
 import type { FetchFn } from './download'
@@ -39,8 +39,8 @@ function loadSettings(): FetchSettings {
   }
 }
 
-function ctx(signal: AbortSignal): ProviderCtx {
-  return { fetchFn, limiter, signal, jamendoClientId: settings.jamendoClientId || undefined }
+function ctx(signal: AbortSignal, quality: Quality = 'best'): ProviderCtx {
+  return { fetchFn, limiter, signal, quality, jamendoClientId: settings.jamendoClientId || undefined }
 }
 
 const errMsg = (e: unknown): string => (e instanceof ProviderError ? e.message : 'Something went wrong. Please try again.')
@@ -80,20 +80,20 @@ export function setFetchSettings(next: FetchSettings): FetchSettings {
   return settings
 }
 
-export async function fetchSearch(provider: keyof typeof PROVIDERS, query: string): Promise<SearchResponse> {
+export async function fetchSearch(provider: keyof typeof PROVIDERS, query: string, quality?: Quality): Promise<SearchResponse> {
   searchAbort?.abort()
   searchAbort = new AbortController()
   try {
-    return { ok: true, results: await PROVIDERS[provider].search(query, ctx(searchAbort.signal)) }
+    return { ok: true, results: await PROVIDERS[provider].search(query, ctx(searchAbort.signal, quality)) }
   } catch (e) {
     if (searchAbort.signal.aborted) return { ok: true, results: [] } // superseded by a newer search
     return { ok: false, error: errMsg(e) }
   }
 }
 
-export async function fetchEnqueue(provider: keyof typeof PROVIDERS, id: string): Promise<EnqueueResponse> {
+export async function fetchEnqueue(provider: keyof typeof PROVIDERS, id: string, quality?: Quality): Promise<EnqueueResponse> {
   try {
-    const items = await PROVIDERS[provider].resolve(id, ctx(new AbortController().signal))
+    const items = await PROVIDERS[provider].resolve(id, ctx(new AbortController().signal, quality))
     const jobs = manager!.enqueue(items)
     return { ok: true, count: jobs.length }
   } catch (e) {

@@ -177,6 +177,16 @@ function onWorklet(m: Record<string, unknown>): void {
       maybeAdvance(m['buffered'] as number)
       break
     }
+    case 'overlap': {
+      // Crossfaded frames were blended into the previous track's buffer: they will never be "consumed" on their own.
+      const s = streams.get(m['trackId'] as number)
+      const n = m['frames'] as number
+      if (s) {
+        s.outstanding = Math.max(0, s.outstanding - n)
+        toDecoder({ type: 'credit', id: s.id, frames: n })
+      }
+      break
+    }
     case 'underrun':
       break
   }
@@ -382,6 +392,7 @@ function handle(c: PlaybackCommand | { type: 'resume-context' }): void {
     }
     case 'shuffle': setShuffle(c.on); break
     case 'repeat': repeat = c.mode; push({ repeat: c.mode }); break
+    case 'crossfade': node.port.postMessage({ type: 'crossfade', seconds: c.seconds }); break
     case 'replayGain': rgMode = c.mode; push({ replayGain: c.mode }); applyReplayGain(queue[index]); break
     case 'seek': startTrack(index, c.seconds); break // new decode from the target; ring flushed with a 10 ms fade
     case 'volume': setVolume(c.slider); break

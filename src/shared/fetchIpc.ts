@@ -1,12 +1,13 @@
 import { z } from 'zod'
-import type { FetchJob, License } from './fetch'
+import { QUALITIES, type FetchJob, type License } from './fetch'
 
 // Renderer ↔ main contract for the fetcher. Kept free of node imports so the preload can bundle it.
 // The renderer never supplies a download URL for a catalogue provider: it names a search hit by id and main resolves it.
 
-export const ProviderIdSchema = z.enum(['archive', 'jamendo', 'link'])
-export const FetchSearchSchema = z.object({ provider: ProviderIdSchema, query: z.string().min(1).max(2000) })
-export const FetchPickSchema = z.object({ provider: ProviderIdSchema, id: z.string().min(1).max(2200) })
+export const ProviderIdSchema = z.enum(['archive', 'commons', 'jamendo', 'link'])
+const QualitySchema = z.enum(QUALITIES).optional()
+export const FetchSearchSchema = z.object({ provider: ProviderIdSchema, query: z.string().min(1).max(2000), quality: QualitySchema })
+export const FetchPickSchema = z.object({ provider: ProviderIdSchema, id: z.string().min(1).max(2200), quality: QualitySchema })
 export const FetchControlSchema = z.object({ op: z.enum(['pause', 'resume', 'cancel', 'clear']), id: z.string().max(64).optional() })
 export const FetchSettingsSchema = z.object({
   jamendoClientId: z.string().max(64).regex(/^[A-Za-z0-9]*$/),

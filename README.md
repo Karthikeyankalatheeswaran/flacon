@@ -173,4 +173,6 @@ Running the fetcher against archive.org for the first time (`E2E_NET=1 npx vites
 - Native menu bar (macOS: Flacon ▸ Settings… ⌘,), Windows gets the same accelerators.
 - Flacon Island: real artwork, purity badge, animated bars, heart/shuffle/repeat, scrubber; Settings: show/hide, always vs while playing, size, artwork, badge.
 - Icons: Phosphor (MIT, light weight; `docs/PHOSPHOR-LICENSE.txt`). Palette retuned for light and dark with a warm accent.
-- Not implemented: crossfade. See `docs/roadmap.md`.
+- Crossfade (Settings ▸ Playback): equal-power overlap on natural track changes; skip and seek never crossfade. Verified in the real app (hand-over 5.1 s after a seek with 6 s on vs 10.3 s off).
+- Fetch: audio quality (Best available / Lossless only / Compact MP3) for Internet Archive, Wikimedia Commons and Jamendo; every item needs a recognised free licence. ccMixter was tried and dropped (its server's responses stall Chromium and overflow Node's header limit).
+- Not implemented: see `docs/roadmap.md`.

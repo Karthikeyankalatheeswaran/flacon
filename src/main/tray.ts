@@ -14,9 +14,8 @@ interface Deps {
 }
 
 function icon(): Electron.NativeImage {
-  const img = nativeImage.createFromBuffer(Buffer.from(TRAY_ICON_PNG_BASE64, 'base64'), { scaleFactor: 2 })
-  img.setTemplateImage(true) // macOS tints it for light/dark menu bars
-  return img
+  // The full-colour app icon (not a template silhouette): it stays visible on light, dark and crowded menu bars.
+  return nativeImage.createFromBuffer(Buffer.from(TRAY_ICON_PNG_BASE64, 'base64'), { scaleFactor: 2 })
 }
 
 function menuFor(s: PlaybackState, d: Deps): Menu {

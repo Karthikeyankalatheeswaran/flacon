@@ -38,6 +38,8 @@ export const SettingsSchema = z.object({
   islandArt: z.boolean().catch(true),
   islandBadge: z.boolean().catch(true),
   replayGain: z.enum(['off', 'track']).catch('off'),
+  /** Seconds of overlap between tracks; 0 = gapless without a fade. */
+  crossfade: z.number().int().min(0).max(10).catch(0),
   showLyrics: z.boolean().catch(false),
   shuffle: z.boolean().catch(false),
   repeat: z.enum(['off', 'all', 'one']).catch('off'),

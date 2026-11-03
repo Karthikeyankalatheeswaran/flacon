@@ -42,6 +42,7 @@ export const AppSettingsSchema = z.object({
   islandArt: z.boolean(),
   islandBadge: z.boolean(),
   replayGain: z.enum(['off', 'track']),
+  crossfade: z.number().int().min(0).max(10),
   showLyrics: z.boolean()
 })
 export type AppSettings = z.infer<typeof AppSettingsSchema>

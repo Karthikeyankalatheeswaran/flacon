@@ -156,3 +156,6 @@
 .sheet-card { border-radius: var(--radius-popover); }
 .seg { border-radius: var(--radius-control); overflow: hidden; }
 .eq { border-radius: var(--radius-popover); }
+
+/* Fetch: audio-quality choice */
+.quality { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 14px; margin-top: 12px; }

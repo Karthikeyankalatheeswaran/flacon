@@ -1,16 +1,24 @@
 import { useEffect, useRef, useState } from 'react'
-import type { FetchJob } from '@shared/fetch'
+import type { FetchJob, Quality } from '@shared/fetch'
 import type { FetchSettings, SearchHit } from '@shared/fetchIpc'
 import { bridge } from '@/lib/bridge'
 import { tabKeys } from '@/lib/a11y'
 import { useStore } from '@/store'
 
 const PROVIDERS = [
-  { id: 'archive', name: 'Internet Archive', placeholder: 'Search public-domain and Creative Commons albums', blurb: 'Public-domain and Creative Commons audio that has FLAC files. Only items with a clear licence are listed.' },
+  { id: 'archive', name: 'Internet Archive', placeholder: 'Search public-domain and Creative Commons albums', blurb: 'Public-domain and Creative Commons audio: FLAC where an item has it, MP3 or Ogg otherwise. Only items with a clear licence are listed.' },
+  { id: 'commons', name: 'Wikimedia Commons', placeholder: 'Search free recordings (e.g. Bach, rain, brass band)', blurb: 'Free-licence recordings from Wikimedia Commons: classical, field recordings, public domain. Mostly Ogg Vorbis, with FLAC and WAV when uploaded.' },
   { id: 'jamendo', name: 'Jamendo', placeholder: 'Search Creative Commons music', blurb: 'Creative Commons music from artists who allow downloads. Needs your own free Jamendo client ID.' },
   { id: 'link', name: 'Paste link', placeholder: 'https://…/album.zip', blurb: 'A direct link to a FLAC or WAV file, or a ZIP of them, such as a purchase download. The link must work on its own: nothing is bypassed.' }
 ] as const
 type PId = (typeof PROVIDERS)[number]['id']
+const QUALITY: Array<{ id: Quality; label: string; hint: string }> = [
+  { id: 'best', label: 'Best available', hint: 'Lossless where the source has it, otherwise the best lossy file.' },
+  { id: 'lossless', label: 'Lossless only', hint: 'FLAC / WAV only. Sources without lossless files list nothing.' },
+  { id: 'compact', label: 'Compact (MP3)', hint: 'Smaller MP3 or Ogg files, for phones and tight disks.' }
+]
+const QUALITY_KEY = 'flacon.fetch.quality'
+const loadQuality = (): Quality => { try { const v = localStorage.getItem(QUALITY_KEY); return v === 'lossless' || v === 'compact' ? v : 'best' } catch { return 'best' } }
 
 const mb = (n: number): string => (n >= 1e9 ? `${(n / 1e9).toFixed(1)} GB` : `${Math.round(n / 1e6)} MB`)
 const STATUS: Record<FetchJob['status'], string> = { queued: 'Waiting', downloading: 'Downloading', verifying: 'Checking', importing: 'Adding to library', paused: 'Paused', done: 'In your library', failed: 'Failed', canceled: 'Canceled' }
@@ -53,6 +61,7 @@ export function FetchPage(): JSX.Element {
   const [adding, setAdding] = useState<string | null>(null)
   const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null)
   const [settings, setSettings] = useState<FetchSettings>({ jamendoClientId: '', watchDownloads: false })
+  const [quality, setQuality] = useState<Quality>(loadQuality)
   const token = useRef(0)
   const p = PROVIDERS.find((x) => x.id === prov)!
 
@@ -63,13 +72,13 @@ export function FetchPage(): JSX.Element {
     const t = ++token.current
     setState({ kind: 'loading' })
     setNotice(null)
-    const r = await bridge.fetchSearch({ provider: prov, query: query.trim() })
+    const r = await bridge.fetchSearch({ provider: prov, query: query.trim(), quality })
     if (t !== token.current) return // a newer search superseded this one
     setState(r.ok ? { kind: 'results', hits: r.results } : { kind: 'error', message: r.error })
   }
   const add = async (h: SearchHit): Promise<void> => {
     setAdding(h.id)
-    const r = await bridge.fetchEnqueue({ provider: h.provider, id: h.id })
+    const r = await bridge.fetchEnqueue({ provider: h.provider, id: h.id, quality })
     setAdding(null)
     setNotice(r.ok ? { ok: true, text: `Added ${r.count} ${r.count === 1 ? 'file' : 'files'} to the queue.` } : { ok: false, text: r.error })
   }
@@ -97,6 +106,18 @@ export function FetchPage(): JSX.Element {
           <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={p.placeholder} aria-label={`Search ${p.name}`} spellCheck={false} />
           <button type="submit" className="primary" disabled={!query.trim() || state.kind === 'loading'}>{prov === 'link' ? 'Check link' : 'Search'}</button>
         </form>
+        {prov !== 'link' && (
+          <div className="quality" role="radiogroup" aria-label="Audio quality">
+            <span className="t-label ink-2">Audio quality</span>
+            <div className="seg">
+              {QUALITY.map((q) => (
+                <button key={q.id} type="button" role="radio" aria-checked={quality === q.id} title={q.hint}
+                  onClick={() => { setQuality(q.id); setState({ kind: 'idle' }); try { localStorage.setItem(QUALITY_KEY, q.id) } catch { /* private window */ } }}>{q.label}</button>
+              ))}
+            </div>
+            <span className="t-label ink-2">{QUALITY.find((q) => q.id === quality)!.hint}</span>
+          </div>
+        )}
         {prov === 'jamendo' && (
           <label className="t-label ink-2" style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 12 }}>
             Jamendo client ID
@@ -120,8 +141,8 @@ export function FetchPage(): JSX.Element {
           )}
           {state.kind === 'results' && state.hits.length === 0 && (
             <div className="empty" role="status" style={{ height: 'auto', padding: '24px 0' }}>
-              <h2 className="t-title">No licensed lossless matches</h2>
-              <p className="ink-2">Try fewer words or an artist name. Items without a clear licence are never listed.</p>
+              <h2 className="t-title">No licensed matches</h2>
+              <p className="ink-2">Try fewer words, an artist name or a different audio quality. Items without a clear licence are never listed.</p>
             </div>
           )}
           {state.kind === 'results' && state.hits.length > 0 && (
@@ -151,7 +172,7 @@ export function FetchPage(): JSX.Element {
         {jobs.length === 0 ? (
           <div className="empty" role="status" style={{ height: 'auto', padding: '24px 0' }}>
             <h2 className="t-title">Nothing fetching</h2>
-            <p className="ink-2">Everything is checked before it’s added: damaged files are rejected and fake hi-res is flagged.</p>
+            <p className="ink-2">Everything is checked before it’s added: damaged lossless files are rejected, fake hi-res is flagged, and lossy files are labelled as lossy.</p>
           </div>
         ) : (
           <ul className="jobs" aria-label="Fetch queue">{jobs.map((j) => <JobRow key={j.id} j={j} />)}</ul>

@@ -118,6 +118,12 @@ function Island(): JSX.Element | null {
   const badgeColor = meta?.purity != null ? TIER_ON_BLACK[purityTier(meta.purity)] : 'rgb(237 237 232 / .62)'
   const sub = np ? [meta?.artist, np.bitDepth ? `${np.bitDepth} bit` : '', `${(np.sampleRate / 1000).toString()} kHz`, np.codec.toUpperCase()].filter(Boolean).join(' · ') : ''
 
+  const closeBtn = (
+    <button type="button" className="isl-btn isl-close" aria-label="Hide Flacon Island" title="Hide island (turn it back on in Settings or View ▸ Flacon Island)"
+      onClick={(e) => { e.stopPropagation(); void bridge.setSettings({ islandEnabled: false }) }}>
+      <Icon name="close" size={14} />
+    </button>
+  )
   const enter = (): void => {
     window.clearTimeout(leaveTimer.current)
     setOver(true)
@@ -149,7 +155,7 @@ function Island(): JSX.Element | null {
         onContextMenu={(e) => e.preventDefault()}
       >
         {st === 'dot' ? (
-          <div role="img" aria-label="Flacon, nothing playing" className="isl-dot" />
+          <div role="img" aria-label="Flacon, nothing playing" className="isl-pip" />
         ) : (
           <>
             {np && st !== 'activity' && st !== 'error' && st !== 'expanded' && (
@@ -179,6 +185,7 @@ function Island(): JSX.Element | null {
                       {ctl('Previous', 'prev', { type: 'prev' })}
                       {ctl(playing ? 'Pause' : 'Play', playing ? 'pause' : 'play', { type: 'toggle' }, true)}
                       {ctl('Next', 'next', { type: 'next' })}
+                      {closeBtn}
                     </div>
                   )}
                   {st === 'expanded' && np && (
@@ -187,6 +194,7 @@ function Island(): JSX.Element | null {
                       <Icon name="heart" size={18} filled={!!meta?.favorite} />
                     </button>
                   )}
+                  {st === 'expanded' && closeBtn}
                 </>
               )}
             </div>

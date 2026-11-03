@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { _electron as electron, type ElectronApplication, type Page } from 'playwright-core'
@@ -46,6 +46,28 @@ beforeAll(async () => {
 afterAll(async () => void (await app?.close().catch(() => undefined)))
 
 describe('features', () => {
+  it('crossfades into the next track: with 6 s on, the hand-over comes ~6 s before the old track ends', async () => {
+    const songs = await all(page)
+    await call(page, (f) => f.setSettings({ crossfade: 6 }))
+    await page.evaluate(`window.flacon.libraryPlay({ source: { kind: 'paths', paths: ${JSON.stringify(songs.map((x) => x.path))} }, mode: 'play', index: 0 })`)
+    await until(async () => (await call(page, (f) => f.getPlayback())).status === 'playing')
+    await call(page, async (f) => f.sendPlayback({ type: 'repeat', mode: 'off' }))
+    await call(page, async (f) => f.sendPlayback({ type: 'shuffle', on: false }))
+    await call(page, async (f) => f.sendPlayback({ type: 'seek', seconds: 26 }))
+    const t0 = Date.now()
+    const next = await until(async () => { const x = (await page.evaluate('window.flacon.getPlayback()')) as { queueIndex: number; status: string; positionSec: number }; return x.queueIndex === 1 && x }, 20_000)
+    const took = (Date.now() - t0) / 1000
+    // Measured: ~10.3 s with crossfade off, ~5.1 s with 6 s on. 7.5 s separates them with slack.
+    expect(took).toBeLessThan(7.5)
+    expect(next.status).toBe('playing')
+    await new Promise((r) => setTimeout(r, 7500))
+    const after = (await page.evaluate('window.flacon.getPlayback()')) as { status: string; positionSec: number; queueIndex: number }
+    expect(after.status).toBe('playing')
+    expect(after.queueIndex).toBe(1)
+    expect(after.positionSec).toBeGreaterThan(5) // the new track kept playing past the fade, no stall
+    await call(page, (f) => f.setSettings({ crossfade: 0 }))
+  }, 60_000)
+
   it('measures purity in the background: full-band is pure, a 16 kHz lowpass is flagged', async () => {
     const rows = await until(async () => { const r = await all(page); return r.length === 2 && r.every((s) => s.purity !== null) && r })
     const full = rows.find((r) => r.title === 'Full band')!
@@ -110,5 +132,25 @@ describe('features', () => {
     await until(async () => !app.windows().some((w) => w.url().endsWith('/island.html')))
     await call(page, (f) => f.setSettings({ islandEnabled: true }))
     await until(async () => app.windows().some((w) => w.url().endsWith('/island.html')))
+  })
+
+  it('the island has a close button that hides it and turns the setting off', async () => {
+    const find = (): Page | undefined => app.windows().find((w) => w.url().endsWith('/island.html'))
+    const island = await until(async () => find())
+    await until(async () => (await island.locator('.isl-activity, .isl-error').count()) === 0) // let the "Now playing" announcement pass
+    await island.locator('.isl').hover() // hover intent expands to the control row
+    await island.getByRole('button', { name: 'Hide Flacon Island' }).click({ timeout: 10_000 })
+    await until(async () => !find())
+    const cfg = (await page.evaluate('window.flacon.getSettings()')) as { islandEnabled: boolean }
+    expect(cfg.islandEnabled).toBe(false)
+    await call(page, (f) => f.setSettings({ islandEnabled: true }))
+    await until(async () => find())
+  })
+
+  it('the tray icon is a real, sized image (the full-colour app icon)', async () => {
+    const b64 = /'([A-Za-z0-9+/=]{100,})'/.exec(readFileSync(resolve('src/main/trayIcon.ts'), 'utf8'))![1]!
+    const size = await app.evaluate(({ nativeImage }, data) => { const i = nativeImage.createFromBuffer(Buffer.from(data, 'base64'), { scaleFactor: 2 }); return { empty: i.isEmpty(), ...i.getSize() } }, b64)
+    expect(size.empty).toBe(false)
+    expect(size.width).toBe(22) // 44 px at 2x → 22 pt, the menu-bar size
   })
 })
