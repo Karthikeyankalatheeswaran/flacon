@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { describeUpdate } from '@shared/update'
 import { bridge } from '@/lib/bridge'
 import { useStore } from '@/store'
 
@@ -23,6 +24,7 @@ export function SettingsPage(): JSX.Element {
   const setTheme = useStore((s) => s.setTheme)
   const addFolder = useStore((s) => s.addFolder)
   const version = useStore((s) => s.libraryVersion)
+  const upd = useStore((s) => s.update)
   const [folders, setFolders] = useState<string[] | null>(null)
   const [confirm, setConfirm] = useState<string | null>(null)
 
@@ -65,6 +67,20 @@ export function SettingsPage(): JSX.Element {
               </div>
             </Row>
           )}
+        </section>
+        <section aria-labelledby="set-upd" style={{ marginTop: 32 }}>
+          <h2 id="set-upd" className="t-label ink-2 set-h">Updates</h2>
+          <Row label="Check for updates automatically" hint="Nothing is downloaded until you choose to.">
+            <input type="checkbox" role="switch" aria-label="Check for updates automatically" disabled={upd.state === 'unavailable'} checked={settings?.updateChecks ?? true} onChange={(e) => void useStore.getState().updateSettings({ updateChecks: e.target.checked })} />
+          </Row>
+          <div className="set-row">
+            <span role="status" aria-live="polite" style={{ color: upd.state === 'error' ? 'var(--warn)' : undefined }}>{describeUpdate(upd)}</span>
+            <span style={{ display: 'flex', gap: 12 }}>
+              {(upd.state === 'idle' || upd.state === 'none' || upd.state === 'error') && <button type="button" className="ghost-btn" onClick={() => bridge.updateAction('check')}>Check now</button>}
+              {upd.state === 'available' && <button type="button" className="primary" onClick={() => bridge.updateAction('download')}>Download</button>}
+              {upd.state === 'ready' && <button type="button" className="primary" onClick={() => bridge.updateAction('install')}>Restart to update</button>}
+            </span>
+          </div>
         </section>
         <section aria-labelledby="set-lib" style={{ marginTop: 32 }}>
           <h2 id="set-lib" className="t-label ink-2 set-h">Library folders</h2>

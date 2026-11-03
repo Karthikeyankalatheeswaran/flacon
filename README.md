@@ -137,3 +137,11 @@ A token audit test (`tokens.test.ts`) checks WCAG AA (4.5:1) for text colours on
 (the preview pane throttles animation frames; the database needs the Electron ABI), so 60 fps at 100k is a design expectation, not a measured result.
 
 Not yet: screen-reader pass with VoiceOver/NVDA, high-contrast mode, per-device audio profiles, settings for naming template/download location, export/import of settings.
+
+## M8 — Packaging, signing, updates, E2E
+- **Packaging:** `electron-builder.yml` (mac dmg+zip, Windows NSIS, file associations, hardened runtime, native modules + ffmpeg unpacked from asar). `npm run package:dir` produced a working macOS arm64 app (~313 MB) that I launched and played a real FLAC in. See [docs/packaging.md](docs/packaging.md).
+- **Updates:** pure reducer (`shared/update.ts`, tested) + `electron-updater` wrapper, opt-out in Settings → Updates; inert without a feed.
+- **E2E:** `npm run test:e2e` drives the real built app with Playwright-Electron (10 tests: boot, onboarding, indexing, playback, Songs, EQ persistence, theme, search shortcut, link rejection, session restore). Set `E2E_APP` to run against a packaged build. It already caught one real regression (an ESM import of `electron-updater` that crashed boot).
+- **CI:** `.github/workflows/ci.yml` — typecheck/unit/E2E on macOS + Windows; tag builds run the ffmpeg gate and package with secrets from the environment.
+
+**Honest gaps:** Windows build and CI are untested (I only ran macOS). No real signing or notarization was performed (no credentials). No update feed is configured. The ffmpeg licence gate **fails by design** until ffmpeg-static is swapped for an LGPL build with libsoxr. The app icon is still the default Electron one. No VoiceOver/NVDA pass; 100k-song performance unmeasured.

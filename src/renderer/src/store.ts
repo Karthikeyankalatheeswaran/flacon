@@ -1,3 +1,4 @@
+import type { UpdateStatus } from '@shared/update'
 import type { AppSettings, AppSettingsInfo } from '@shared/ipc'
 import type { FetchJob } from '@shared/fetch'
 import { create } from 'zustand'
@@ -15,6 +16,7 @@ interface UiState {
   page: 'library' | 'fetch' | 'settings'
   setPage: (p: 'library' | 'fetch' | 'settings') => void
   settings: AppSettingsInfo | null
+  update: UpdateStatus
   updateSettings: (patch: Partial<AppSettings>) => Promise<void>
   fetchJobs: FetchJob[]
   setEqOpen: (open: boolean) => void
@@ -43,6 +45,7 @@ export const useStore = create<UiState>((set) => ({
   page: 'library',
   setPage: (page) => set({ page }),
   settings: null,
+  update: { state: 'idle' },
   updateSettings: async (patch) => set({ settings: await bridge.setSettings(patch) }),
   fetchJobs: [],
   setEqOpen: (eqOpen) => set({ eqOpen }),
@@ -86,6 +89,8 @@ export function initApp(): () => void {
   void bridge.getPlayback().then((pb) => useStore.setState({ pb }))
   void refreshAlbums()
   void bridge.getSettings().then((settings) => useStore.setState({ settings }))
+  void bridge.getUpdate().then((update) => useStore.setState({ update }))
+  const offU = bridge.onUpdate((update) => useStore.setState({ update }))
   void bridge.fetchGet().then((fetchJobs) => useStore.setState({ fetchJobs }))
   const offF = bridge.onFetch((fetchJobs) => useStore.setState({ fetchJobs: [...fetchJobs] }))
   void bridge.getLibraryProgress().then((progress) => useStore.setState({ progress }))
@@ -107,5 +112,6 @@ export function initApp(): () => void {
     offL()
     offC()
     offF()
+    offU()
   }
 }

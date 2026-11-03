@@ -26,6 +26,8 @@ export const SettingsSchema = z.object({
   theme: z.enum(['system', 'light', 'dark']).catch('system'),
   launchAtLogin: z.boolean().catch(false),
   pauseOnSuspend: z.boolean().catch(true),
+  /** Look for new versions in the background (never downloads without a click). */
+  updateChecks: z.boolean().catch(true),
   /** Windows only: which screen edge the island docks to. */
   islandEdge: z.enum(['top', 'bottom']).catch('top'),
   volume: z.number().min(0).max(1).catch(0.8),

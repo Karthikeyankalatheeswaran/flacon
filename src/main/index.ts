@@ -4,6 +4,8 @@ import { pathToFileURL } from 'node:url'
 import { app, BrowserWindow, dialog, ipcMain, nativeTheme, net, powerMonitor, powerSaveBlocker, protocol, screen } from 'electron'
 import { AppSettingsSchema, type AppSettings, type AppSettingsInfo } from '@shared/ipc'
 import { displayKey, isVisibleOn, type WindowBounds } from '@shared/settings'
+import { UpdateActionSchema } from '@shared/ipc'
+import { checkForUpdate, downloadUpdate, installUpdate, startUpdater, stopUpdater, updateStatus } from './updater'
 import { createSettingsStore, type SettingsStore } from './settingsStore'
 import { AlbumIdSchema, Channels, SearchQuerySchema, SongsQuerySchema, ThemeSchema, type AppState, type ThemeSetting } from '@shared/ipc'
 import type { Album, LibraryProgress, LibraryTrack, SongsPage } from '@shared/library'
@@ -92,7 +94,7 @@ function applyLoginItem(enabled: boolean): void {
 function settingsInfo(): AppSettingsInfo {
   const s = settings.get()
   return {
-    launchAtLogin: s.launchAtLogin, pauseOnSuspend: s.pauseOnSuspend, islandEdge: s.islandEdge, onboarded: s.onboarded,
+    launchAtLogin: s.launchAtLogin, pauseOnSuspend: s.pauseOnSuspend, updateChecks: s.updateChecks, islandEdge: s.islandEdge, onboarded: s.onboarded,
     recovered: settings.recoveredFrom !== null, canLaunchAtLogin: app.isPackaged, platform: process.platform as AppState['platform']
   }
 }
@@ -213,6 +215,14 @@ function registerIpc(): void {
     if (!(await libraryCall<string[]>({ op: 'folders' })).includes(path)) return
     await libraryCall({ op: 'removeFolder', path })
   })
+  ipcMain.handle(Channels.updateGet, () => updateStatus())
+  ipcMain.on(Channels.updateAction, (_e, raw: unknown) => {
+    const op = UpdateActionSchema.safeParse(raw)
+    if (!op.success) return
+    if (op.data === 'check') checkForUpdate()
+    else if (op.data === 'download') downloadUpdate()
+    else installUpdate()
+  })
   ipcMain.handle(Channels.settingsGet, () => settingsInfo())
   ipcMain.handle(Channels.settingsSet, (_e, raw: unknown) => {
     const patch = AppSettingsSchema.partial().parse(raw) as Partial<AppSettings>
@@ -311,6 +321,7 @@ if (!app.requestSingleInstanceLock()) {
   app.on('will-quit', () => {
     saveSession()
     settings.flush()
+    stopUpdater()
     stopFetcher()
     shutdownEngine()
     stopLibrary()
@@ -335,6 +346,7 @@ if (!app.requestSingleInstanceLock()) {
     dispatch({ type: 'volume', slider: settings.get().volume })
     restoreSession()
     mainWin = makeMainWindow(launchedHidden())
+    startUpdater((st) => uiWindows().forEach((w) => w.webContents.send(Channels.updateState, st)), () => settings.get().updateChecks)
     islandWin = createIslandWindow(() => settings.get().islandEdge)
     setInterval(saveSession, 15_000).unref() // survive a crash with a recent position
     createTray(playback, trayDeps)

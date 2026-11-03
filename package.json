@@ -11,13 +11,18 @@
     "build": "electron-vite build",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "test": "vitest run",
-    "rebuild:native": "cd node_modules/better-sqlite3 && prebuild-install -r electron -t $(node -p \"require('../electron/package.json').version\") --arch $(node -p \"process.arch\")"
+    "rebuild:native": "cd node_modules/better-sqlite3 && prebuild-install -r electron -t $(node -p \"require('../electron/package.json').version\") --arch $(node -p \"process.arch\")",
+    "package:dir": "electron-vite build && electron-builder --dir --arm64 -c.mac.identity=null && codesign --force --deep -s - dist/mac-arm64/Flacon.app",
+    "package": "electron-vite build && node scripts/check-ffmpeg-license.mjs && electron-builder",
+    "check:ffmpeg": "node scripts/check-ffmpeg-license.mjs",
+    "test:e2e": "electron-vite build && vitest run --config vitest.e2e.config.ts"
   },
   "dependencies": {
     "@tanstack/react-virtual": "^3.14.25",
     "@types/yauzl": "^3.4.0",
     "better-sqlite3": "^11.10.0",
     "chokidar": "^4.0.3",
+    "electron-updater": "^6.8.11",
     "ffmpeg-static": "^5.3.0",
     "framer-motion": "^11.18.2",
     "music-metadata": "^11.2.0",
@@ -34,9 +39,12 @@
     "@types/react-dom": "^18.3.5",
     "@vitejs/plugin-react": "^4.3.4",
     "electron": "^33.3.1",
+    "electron-builder": "^26.18.0",
     "electron-vite": "^2.3.0",
+    "playwright-core": "^1.64.1",
     "typescript": "^5.7.2",
     "vite": "^5.4.11",
     "vitest": "^2.1.8"
-  }
+  },
+  "author": "Flacon contributors"
 }

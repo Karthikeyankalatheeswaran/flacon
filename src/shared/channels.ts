@@ -24,6 +24,9 @@ export const Channels = {
   libraryChanged: 'flacon:library-changed',
   libraryFolders: 'flacon:library-folders',
   libraryRemoveFolder: 'flacon:library-remove-folder',
+  updateGet: 'flacon:update-get',
+  updateState: 'flacon:update-state',
+  updateAction: 'flacon:update-action',
   settingsGet: 'flacon:settings-get',
   settingsSet: 'flacon:settings-set',
   // fetcher

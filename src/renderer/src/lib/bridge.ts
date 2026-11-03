@@ -1,3 +1,4 @@
+import type { UpdateStatus } from '@shared/update'
 import type { FetchJob } from '@shared/fetch'
 import type { FetchSettings } from '@shared/fetchIpc'
 import type { AppSettingsInfo, AppState, FlaconBridge, ThemeSetting } from '@shared/ipc'
@@ -88,6 +89,13 @@ function mockBridge(): FlaconBridge {
     onLibraryChanged: () => () => {},
     libraryFolders: async () => [...mockFolders],
     libraryRemoveFolder: async (p) => void mockFolders.splice(mockFolders.indexOf(p), 1),
+    getUpdate: async () => mockUpdate,
+    onUpdate: (cb) => (updateSubs.add(cb), () => updateSubs.delete(cb)),
+    updateAction: (op) => {
+      const set = (u: UpdateStatus): void => { mockUpdate = u; updateSubs.forEach((cb) => cb(u)) }
+      if (op === 'check') { set({ state: 'checking' }); setTimeout(() => set({ state: 'available', version: '0.2.0' }), 900) }
+      if (op === 'download') { set({ state: 'downloading', version: '0.2.0', percent: 0 }); let p = 0; const t = setInterval(() => { p += 20; if (p >= 100) { clearInterval(t); set({ state: 'ready', version: '0.2.0' }) } else set({ state: 'downloading', version: '0.2.0', percent: p }) }, 300) }
+    },
     getSettings: async () => ({ ...mockSettings }),
     setSettings: async (patch) => ({ ...Object.assign(mockSettings, patch) }),
     ...mockFetch()
@@ -97,8 +105,10 @@ function mockBridge(): FlaconBridge {
 export const bridge: FlaconBridge = window.flacon ?? mockBridge()
 
 
+let mockUpdate: UpdateStatus = { state: 'idle' }
+const updateSubs = new Set<(s: UpdateStatus) => void>()
 const mockFolders = ['/Users/you/Music/Flacon', '/Volumes/Archive/Lossless']
-const mockSettings: AppSettingsInfo = { launchAtLogin: false, pauseOnSuspend: true, islandEdge: 'top', onboarded: false, recovered: false, canLaunchAtLogin: true, platform: 'darwin' }
+const mockSettings: AppSettingsInfo = { launchAtLogin: false, pauseOnSuspend: true, updateChecks: true, islandEdge: 'top', onboarded: false, recovered: false, canLaunchAtLogin: true, platform: 'darwin' }
 
 // Browser-preview stand-in for the fetcher: canned search results and a job that walks through every state.
 function mockFetch(): Pick<FlaconBridge, 'fetchSearch' | 'fetchEnqueue' | 'fetchControl' | 'fetchGet' | 'onFetch' | 'fetchSettings' | 'fetchSetSettings'> {

@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { Channels } from '@shared/channels'
+import type { UpdateStatus } from '@shared/update'
 import type { FetchJob } from '@shared/fetch'
 import type { FetchSettings } from '@shared/fetchIpc'
 import type { AppState, EngineBridge, FlaconBridge, ThemeSetting } from '@shared/ipc'
@@ -40,6 +41,9 @@ if (location.pathname.endsWith('/engine.html')) {
     libraryPlayAlbum: (id: string) => ipcRenderer.invoke(Channels.libraryPlayAlbum, id),
     libraryFolders: (): Promise<string[]> => ipcRenderer.invoke(Channels.libraryFolders),
     libraryRemoveFolder: (p: string) => ipcRenderer.invoke(Channels.libraryRemoveFolder, p),
+    getUpdate: () => ipcRenderer.invoke(Channels.updateGet),
+    onUpdate: (cb) => subscribe<UpdateStatus>(Channels.updateState, cb),
+    updateAction: (op) => ipcRenderer.send(Channels.updateAction, op),
     getSettings: () => ipcRenderer.invoke(Channels.settingsGet),
     setSettings: (patch) => ipcRenderer.invoke(Channels.settingsSet, patch),
     getLibraryProgress: (): Promise<LibraryProgress> => ipcRenderer.invoke(Channels.libraryGetProgress),

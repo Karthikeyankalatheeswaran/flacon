@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import type { FetchBridge } from './fetchIpc'
+import type { UpdateStatus } from './update'
 import { SONG_SORTS, type Album, type LibraryProgress, type SongsPage, type SongsQuery } from './library'
 import type { PlaybackCommand, PlaybackState } from './playback'
 
@@ -29,6 +30,7 @@ export type AppState = z.infer<typeof AppStateSchema>
 export const AppSettingsSchema = z.object({
   launchAtLogin: z.boolean(),
   pauseOnSuspend: z.boolean(),
+  updateChecks: z.boolean(),
   islandEdge: z.enum(['top', 'bottom']),
   onboarded: z.boolean()
 })
@@ -61,6 +63,9 @@ export interface FlaconBridge extends FetchBridge {
   libraryPlayAlbum(albumId: string): Promise<void>
   libraryFolders(): Promise<string[]>
   libraryRemoveFolder(path: string): Promise<void>
+  getUpdate(): Promise<UpdateStatus>
+  onUpdate(cb: (s: UpdateStatus) => void): () => void
+  updateAction(op: 'check' | 'download' | 'install'): void
   getSettings(): Promise<AppSettingsInfo>
   setSettings(patch: Partial<AppSettings>): Promise<AppSettingsInfo>
   librarySongs(q: SongsQuery): Promise<SongsPage>
@@ -85,3 +90,5 @@ export const SongsQuerySchema = z.object({
   offset: z.number().int().min(0).max(10_000_000),
   limit: z.number().int().min(1).max(500)
 })
+
+export const UpdateActionSchema = z.enum(['check', 'download', 'install'])
