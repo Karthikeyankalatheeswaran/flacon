@@ -1,17 +1,14 @@
 import { useStore } from '@/store'
 import { Icon } from './icons'
 
-const MAIN = [
-  { label: 'Tonight', n: '' },
-  { label: 'Library', n: '' },
-  { label: 'Blends', n: '' },
-  { label: 'Fetch', n: '3' }
-]
+const MAIN = ['Tonight', 'Library', 'Blends', 'Fetch']
 const BLENDS = ['Verified only', 'Added this month', 'Most poured', 'Late drives']
 
 export function Rail({ active }: { active: string }): JSX.Element {
   const platform = useStore((s) => s.app?.platform)
   const progress = useStore((s) => s.progress)
+  const setPage = useStore((s) => s.setPage)
+  const pending = useStore((s) => s.fetchJobs.filter((j) => j.status !== 'done' && j.status !== 'failed' && j.status !== 'canceled').length)
   const mac = platform !== 'win32'
   return (
     <nav className="rail" aria-label="Sections">
@@ -27,9 +24,10 @@ export function Rail({ active }: { active: string }): JSX.Element {
       </div>
       <div style={{ height: 20 }} />
       {MAIN.map((m) => (
-        <button key={m.label} type="button" className="rail-link" aria-current={m.label === active ? 'page' : undefined}>
-          <span>{m.label}</span>
-          <span className="t-label ink-2">{m.n}</span>
+        <button key={m} type="button" className="rail-link" aria-current={m === active ? 'page' : undefined}
+          onClick={() => (m === 'Library' ? setPage('library') : m === 'Fetch' ? setPage('fetch') : undefined)}>
+          <span>{m}</span>
+          <span className="t-label ink-2">{m === 'Fetch' && pending > 0 ? pending : ''}</span>
         </button>
       ))}
       <div style={{ height: 24 }} />

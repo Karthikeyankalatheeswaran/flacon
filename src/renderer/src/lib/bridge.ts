@@ -1,3 +1,5 @@
+import type { FetchJob } from '@shared/fetch'
+import type { FetchSettings } from '@shared/fetchIpc'
 import type { AppState, FlaconBridge, ThemeSetting } from '@shared/ipc'
 import { sampleAlbums, type LibrarySong, type SongsQuery } from '@shared/library'
 import { initialPlayback, type PlaybackState } from '@shared/playback'
@@ -83,8 +85,71 @@ function mockBridge(): FlaconBridge {
     libraryPlayAlbum: async () => {},
     getLibraryProgress: async () => ({ phase: 'idle', done: 0, total: 0, denied: [] }),
     onLibraryProgress: () => () => {},
-    onLibraryChanged: () => () => {}
+    onLibraryChanged: () => () => {},
+    ...mockFetch()
   }
 }
 
 export const bridge: FlaconBridge = window.flacon ?? mockBridge()
+
+
+// Browser-preview stand-in for the fetcher: canned search results and a job that walks through every state.
+function mockFetch(): Pick<FlaconBridge, 'fetchSearch' | 'fetchEnqueue' | 'fetchControl' | 'fetchGet' | 'onFetch' | 'fetchSettings' | 'fetchSetSettings'> {
+  let jobs: FetchJob[] = []
+  let settings: FetchSettings = { jamendoClientId: '', watchDownloads: false }
+  const subs = new Set<(j: FetchJob[]) => void>()
+  const emit = (): void => subs.forEach((cb) => cb(jobs.map((j) => ({ ...j }))))
+  const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
+  const cc = { name: 'CC BY-SA 4.0', url: 'https://creativecommons.org/licenses/by-sa/4.0/', attribution: 'Attribution required' }
+  const walk = async (j: FetchJob, fail: boolean): Promise<void> => {
+    const st = (): FetchJob['status'] => j.status
+    j.status = 'downloading'
+    for (let i = 1; i <= 10; i++) {
+      await sleep(250)
+      if (st() === 'canceled') return
+      while (st() === 'paused') await sleep(200)
+      j.received = (j.total * i) / 10
+      if (fail && i === 6) { j.status = 'failed'; j.error = 'The server refused the download (403).'; return emit() }
+      emit()
+    }
+    j.status = 'verifying'; emit(); await sleep(700)
+    j.status = 'importing'; emit(); await sleep(500)
+    j.status = 'done'
+    j.notes = j.item.title.includes('Upscaled') ? ['Claims 24/96: content ends near 16.0 kHz, like a 16 kHz lossy source.'] : []
+    emit()
+  }
+  return {
+    fetchSearch: async ({ provider, query }) => {
+      await sleep(400)
+      if (/offline/i.test(query)) return { ok: false, error: 'Couldn’t reach the server. Check your connection and try again.' }
+      if (provider === 'jamendo') return { ok: false, error: 'Add your Jamendo client ID in Settings to search Jamendo.' }
+      if (provider === 'link') return /^https:\/\//.test(query) ? { ok: true, results: [{ provider, id: query, title: decodeURIComponent(query.split('/').pop() || 'download'), artist: new URL(query).hostname }] } : { ok: false, error: 'That doesn’t look like a link.' }
+      if (/nothing|empty/i.test(query)) return { ok: true, results: [] }
+      return { ok: true, results: [
+        { provider, id: 'night-garden', title: 'Night Garden Sessions', artist: 'Moth Quartet', license: cc },
+        { provider, id: 'harbour-lights', title: 'Harbour Lights (Live 1974)', artist: 'The Pilots', license: { name: 'Public Domain', url: 'https://creativecommons.org/publicdomain/mark/1.0/' } },
+        { provider, id: 'upscaled-demo', title: 'Upscaled Demo', artist: 'Tape Hiss', license: { name: 'CC0', url: 'https://creativecommons.org/publicdomain/zero/1.0/' } }
+      ] }
+    },
+    fetchEnqueue: async ({ provider, id }) => {
+      const mk = (title: string, size: number): FetchJob => ({ id: `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, status: 'queued', received: 0, total: size, attempt: 0, retryAt: 0, error: null, notes: [], createdAt: Date.now(),
+        item: { provider, title, artist: '', album: id, url: `https://example.org/${id}`, format: 'flac', size, license: cc } })
+      const made = id === 'upscaled-demo' ? [mk('Upscaled Demo', 41e6)] : id === 'link' ? [mk(id, 30e6)] : [mk('01 Moth Song', 38e6), mk('02 Lantern', 52e6)]
+      jobs.push(...made); emit()
+      made.forEach((j, i) => void walk(j, id === 'harbour-lights' && i === 0))
+      return { ok: true, count: made.length }
+    },
+    fetchControl: ({ op, id }) => {
+      if (op === 'clear') jobs = jobs.filter((j) => !['done', 'failed', 'canceled'].includes(j.status))
+      const j = jobs.find((x) => x.id === id)
+      if (j && op === 'pause') j.status = 'paused'
+      if (j && op === 'resume') { j.status = 'downloading'; j.error = null }
+      if (j && op === 'cancel') j.status = 'canceled'
+      emit()
+    },
+    fetchGet: async () => jobs,
+    onFetch: (cb) => { subs.add(cb); return () => subs.delete(cb) },
+    fetchSettings: async () => settings,
+    fetchSetSettings: async (s) => (settings = s)
+  }
+}

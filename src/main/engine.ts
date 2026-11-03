@@ -11,7 +11,7 @@ let ready = false
 const backlog: Array<PlaybackCommand | { type: 'resume-context' }> = []
 
 // In a packaged app ffmpeg lives outside the asar; electron-builder unpacks it (milestone 8).
-function resolveFfmpeg(): string {
+export function resolveFfmpeg(): string {
   const p = process.env['FLACON_FFMPEG'] ?? ffmpegPath ?? ''
   return p.replace('app.asar', 'app.asar.unpacked')
 }

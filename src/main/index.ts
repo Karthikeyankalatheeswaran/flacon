@@ -6,7 +6,9 @@ import { AlbumIdSchema, Channels, SearchQuerySchema, SongsQuerySchema, ThemeSche
 import type { Album, LibraryProgress, LibraryTrack, SongsPage } from '@shared/library'
 import { defaultEq, sanitizeEq, type EqSettings } from '@shared/eq'
 import { AUDIO_EXTENSIONS, initialPlayback, isAudioPath, type PlaybackState } from '@shared/playback'
-import { createEngineWindow, dispatch, isEngine, sendToEngine, shutdownEngine } from './engine'
+import { createEngineWindow, dispatch, isEngine, resolveFfmpeg, sendToEngine, shutdownEngine } from './engine'
+import { FetchControlSchema, FetchPickSchema, FetchSearchSchema, FetchSettingsSchema } from '@shared/fetchIpc'
+import { fetchControl, fetchEnqueue, fetchList, fetchSearch, getFetchSettings, setFetchSettings, startFetcher, stopFetcher } from './fetcher/service'
 import { artDir, call as libraryCall, getProgress, startLibrary, stopLibrary } from './library/client'
 import { installCsp } from './security'
 import { createTray, updateTray } from './tray'
@@ -141,7 +143,33 @@ function registerIpc(): void {
     const tracks = await libraryCall<LibraryTrack[]>({ op: 'albumTracks', albumId })
     if (tracks.length) dispatch({ type: 'load', tracks: tracks.map((t) => ({ path: t.path })), index: 0 })
   })
+  ipcMain.handle(Channels.fetchSearch, (_e, raw: unknown) => {
+    const q = FetchSearchSchema.parse(raw)
+    return fetchSearch(q.provider, q.query)
+  })
+  ipcMain.handle(Channels.fetchEnqueue, (_e, raw: unknown) => {
+    const p = FetchPickSchema.parse(raw)
+    return fetchEnqueue(p.provider, p.id)
+  })
+  ipcMain.on(Channels.fetchControl, (_e, raw: unknown) => {
+    const c = FetchControlSchema.safeParse(raw)
+    if (c.success) fetchControl(c.data.op, c.data.id)
+  })
+  ipcMain.handle(Channels.fetchGet, () => fetchList())
+  ipcMain.handle(Channels.fetchSettingsGet, () => getFetchSettings())
+  ipcMain.handle(Channels.fetchSettingsSet, (_e, raw: unknown) => setFetchSettings(FetchSettingsSchema.parse(raw)))
   nativeTheme.on('updated', broadcast)
+}
+
+function startFetchService(): void {
+  void startFetcher({
+    ffmpeg: resolveFfmpeg(),
+    onJobs: (jobs) => uiWindows().forEach((w) => w.webContents.send(Channels.fetchState, jobs)),
+    onImported: (root) => {
+      // The managed folder is added once; the watcher indexes new files, and an explicit scan covers the first import.
+      void libraryCall({ op: 'addFolder', path: root }).then(() => libraryCall({ op: 'scan' }))
+    }
+  })
 }
 
 function startLibraryService(): void {
@@ -198,6 +226,7 @@ if (!app.requestSingleInstanceLock()) {
     dispatch({ type: 'pause' }) // fade out via the worklet; queue persistence arrives with settings (milestone 7)
   })
   app.on('will-quit', () => {
+    stopFetcher()
     shutdownEngine()
     stopLibrary()
   })
@@ -210,6 +239,7 @@ if (!app.requestSingleInstanceLock()) {
     registerIpc()
     registerPower()
     startLibraryService()
+    startFetchService()
     createEngineWindow()
     const eq = loadEq()
     savedEq = JSON.stringify(eq) // don't rewrite what we just read

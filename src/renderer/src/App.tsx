@@ -4,6 +4,7 @@ import { Rail } from './components/Rail'
 import { AlbumGrid } from './components/AlbumGrid'
 import { Vessel } from './components/Vessel'
 import { Icon } from './components/icons'
+import { FetchPage } from './components/FetchPage'
 import { EqPanel } from './components/EqPanel'
 import { SongsTable } from './components/SongsTable'
 
@@ -17,6 +18,7 @@ export function App(): JSX.Element {
   const setTheme = useStore((s) => s.setTheme)
   const scanning = useStore((s) => s.progress.phase === 'scanning')
   const eqOpen = useStore((s) => s.eqOpen)
+  const page = useStore((s) => s.page)
   const [over, setOver] = useState(false)
   const [tab, setTab] = useState<Tab>('Albums')
   const shellRef = useRef<HTMLDivElement>(null)
@@ -33,8 +35,10 @@ export function App(): JSX.Element {
 
   return (
     <div className="shell" ref={shellRef}>
-      <Rail active="Library" />
+      <Rail active={page === 'fetch' ? 'Fetch' : 'Library'} />
       <main className="main">
+        {page === 'fetch' ? <FetchPage /> : (
+        <>
         <div className="titlebar-drag" style={{ height: 'var(--shell-titlebar)', display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
           <label className="search no-drag">
             <Icon name="search" />
@@ -103,6 +107,8 @@ export function App(): JSX.Element {
             onPour={pour} onPlay={(a) => void playAlbum(a.id)} />
         )}
           </>
+        )}
+        </>
         )}
       </main>
       <Vessel over={over} />

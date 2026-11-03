@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import type { FetchBridge } from './fetchIpc'
 import { SONG_SORTS, type Album, type LibraryProgress, type SongsPage, type SongsQuery } from './library'
 import type { PlaybackCommand, PlaybackState } from './playback'
 
@@ -26,7 +27,7 @@ export const AppStateSchema = z.object({
 export type AppState = z.infer<typeof AppStateSchema>
 
 /** The only surface the preload bridge exposes to renderers. */
-export interface FlaconBridge {
+export interface FlaconBridge extends FetchBridge {
   getState(): Promise<AppState>
   setTheme(theme: ThemeSetting): Promise<void>
   /** Island window: toggles click-through so the transparent area never eats clicks. */

@@ -21,5 +21,13 @@ export const Channels = {
   libraryPlayAlbum: 'flacon:library-play-album',
   libraryGetProgress: 'flacon:library-get-progress',
   libraryProgress: 'flacon:library-progress',
-  libraryChanged: 'flacon:library-changed'
+  libraryChanged: 'flacon:library-changed',
+  // fetcher
+  fetchSearch: 'flacon:fetch-search',
+  fetchEnqueue: 'flacon:fetch-enqueue',
+  fetchControl: 'flacon:fetch-control',
+  fetchGet: 'flacon:fetch-get',
+  fetchState: 'flacon:fetch-state',
+  fetchSettingsGet: 'flacon:fetch-settings-get',
+  fetchSettingsSet: 'flacon:fetch-settings-set'
 } as const

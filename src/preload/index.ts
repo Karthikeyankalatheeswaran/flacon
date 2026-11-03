@@ -1,5 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { Channels } from '@shared/channels'
+import type { FetchJob } from '@shared/fetch'
+import type { FetchSettings } from '@shared/fetchIpc'
 import type { AppState, EngineBridge, FlaconBridge, ThemeSetting } from '@shared/ipc'
 import type { Album, LibraryProgress, SongsPage, SongsQuery } from '@shared/library'
 import type { PlaybackCommand, PlaybackState } from '@shared/playback'
@@ -38,7 +40,14 @@ if (location.pathname.endsWith('/engine.html')) {
     libraryPlayAlbum: (id: string) => ipcRenderer.invoke(Channels.libraryPlayAlbum, id),
     getLibraryProgress: (): Promise<LibraryProgress> => ipcRenderer.invoke(Channels.libraryGetProgress),
     onLibraryProgress: (cb) => subscribe<LibraryProgress>(Channels.libraryProgress, cb),
-    onLibraryChanged: (cb) => subscribe<null>(Channels.libraryChanged, () => cb())
+    onLibraryChanged: (cb) => subscribe<null>(Channels.libraryChanged, () => cb()),
+    fetchSearch: (q) => ipcRenderer.invoke(Channels.fetchSearch, q),
+    fetchEnqueue: (p) => ipcRenderer.invoke(Channels.fetchEnqueue, p),
+    fetchControl: (c) => ipcRenderer.send(Channels.fetchControl, c),
+    fetchGet: (): Promise<FetchJob[]> => ipcRenderer.invoke(Channels.fetchGet),
+    onFetch: (cb) => subscribe<FetchJob[]>(Channels.fetchState, cb),
+    fetchSettings: (): Promise<FetchSettings> => ipcRenderer.invoke(Channels.fetchSettingsGet),
+    fetchSetSettings: (s: FetchSettings): Promise<FetchSettings> => ipcRenderer.invoke(Channels.fetchSettingsSet, s)
   }
   contextBridge.exposeInMainWorld('flacon', bridge)
 }

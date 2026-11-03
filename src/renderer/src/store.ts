@@ -1,3 +1,4 @@
+import type { FetchJob } from '@shared/fetch'
 import { create } from 'zustand'
 import type { AppState, ThemeSetting } from '@shared/ipc'
 import type { Album, LibraryProgress } from '@shared/library'
@@ -10,6 +11,9 @@ interface UiState {
   albums: Album[]
   libraryLoaded: boolean
   eqOpen: boolean
+  page: 'library' | 'fetch'
+  setPage: (p: 'library' | 'fetch') => void
+  fetchJobs: FetchJob[]
   setEqOpen: (open: boolean) => void
   /** Bumped whenever the library changes on disk; tables refetch when it moves. */
   libraryVersion: number
@@ -33,6 +37,9 @@ export const useStore = create<UiState>((set) => ({
   albums: [],
   libraryLoaded: false,
   eqOpen: false,
+  page: 'library',
+  setPage: (page) => set({ page }),
+  fetchJobs: [],
   setEqOpen: (eqOpen) => set({ eqOpen }),
   libraryVersion: 0,
   search: '',
@@ -73,6 +80,8 @@ export function initApp(): () => void {
   void bridge.getState().then(apply)
   void bridge.getPlayback().then((pb) => useStore.setState({ pb }))
   void refreshAlbums()
+  void bridge.fetchGet().then((fetchJobs) => useStore.setState({ fetchJobs }))
+  const offF = bridge.onFetch((fetchJobs) => useStore.setState({ fetchJobs: [...fetchJobs] }))
   void bridge.getLibraryProgress().then((progress) => useStore.setState({ progress }))
   const offA = bridge.onState(apply)
   const offP = bridge.onPlayback((pb) => useStore.setState({ pb }))
@@ -91,5 +100,6 @@ export function initApp(): () => void {
     offP()
     offL()
     offC()
+    offF()
   }
 }

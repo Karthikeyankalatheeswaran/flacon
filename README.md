@@ -86,3 +86,30 @@ With the EQ off every stage is at unity, labelled "bit-perfect path" in the UI.
 - UI: EQ button in the vessel opens the panel (Esc closes; sliders are native, keyboard-accessible, double-click resets a band).
 - Dev note: unpackaged `electron out/main/index.js` uses the `Electron` userData folder, not `flacon`.
 - Not yet: parametric bands, crossfeed, ReplayGain, per-device profiles.
+
+## M6 — Fetcher
+
+Fetch page (rail → Fetch): search, queue, controls. Everything downloaded is checked before it reaches the library.
+
+**Providers** (`src/main/fetcher/providers.ts`): Internet Archive (only items with a recognised CC / public-domain licence and FLAC files),
+Jamendo (CC, official API, your own client ID in the page), and Paste link (direct https file or ZIP you are entitled to; nothing is bypassed).
+No DRM circumvention, no streaming-service ripping. The renderer never supplies a catalogue URL: it names a search hit and main resolves it.
+
+**Safety rules** (`src/shared/fetch.ts`, all unit-tested): https only; no credentials in URLs; loopback/private/link-local targets blocked, re-checked on every redirect hop;
+honest `User-Agent`; per-host 1 s spacing; ZIP: zip-slip rejected, only audio/art/cue/log extracted, entry/size/ratio limits measured on bytes actually written;
+filenames NFC-normalised, Windows reserved names and trailing dots handled, long names truncated with a hash, case-insensitive collisions resolved.
+
+**Download manager** (`manager.ts`, `download.ts`): 3 concurrent, HTTP Range resume from `.part`, atomic rename, exponential backoff with jitter (5 tries),
+permanent errors (403/404) not retried, pause/resume/cancel (cancel deletes partial data), disk-space preflight, queue persisted to `fetch-jobs.json` and recovered on restart.
+Network goes through Electron's `net.fetch`, so system proxy settings apply.
+
+**Post-processing** (`verify.ts`, `analysis.ts`, `postprocess.ts`): FLAC decode test + STREAMINFO MD5 comparison; corrupt files are rejected.
+Spectral cutoff analysis flags lossless files that stop near 16/19/20 kHz ("likely lossy source"); padded 16-bit-in-24 is flagged. Findings show on the job, the file is still kept.
+Missing tags are filled from the source, the licence is written into the file (COPYRIGHT/LICENSE) without re-encoding, files are renamed by
+`{albumartist}/{album} ({year})/{disc}-{track} {title}` into `~/Music/Flacon`, and cover art beside the audio is copied as folder art.
+
+**Watch Downloads folder** (opt-in): a new ZIP containing lossless audio is *copied* into the queue; the original stays untouched.
+
+Not yet / known gaps: providers run in the main process (modules never touch the filesystem, but a separate fetcher utilityProcess is still to do);
+dedupe is by target path + size, not by tags/duration against the library; artwork is folder art, not embedded; Jamendo client ID is stored in plain JSON in userData
+(it's a public identifier, not a secret); only the Internet Archive search was exercised against the live API (read-only), no real download was run.
