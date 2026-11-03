@@ -68,10 +68,20 @@ export function islandReducer(m: IslandModel, e: IslandEvent): IslandModel {
 /** Geometry from the handoff tokens (island.*). Window is sized to the largest state once. */
 export const islandGeometry = {
   dot: { w: 8, h: 8, r: 4 },
-  compact: { w: 200, h: 36, r: 18 },
-  hover: { w: 360, h: 84, r: 28 },
-  expanded: { w: 400, h: 168, r: 32 },
+  compact: { w: 236, h: 38, r: 19 },
+  hover: { w: 380, h: 84, r: 28 },
+  expanded: { w: 420, h: 188, r: 32 },
   activity: { w: 300, h: 44, r: 22 },
   error: { w: 320, h: 44, r: 22 },
   hidden: { w: 0, h: 0, r: 0 }
 } as const satisfies Record<IslandStateName, { w: number; h: number; r: number }>
+
+export const ISLAND_COMPACT_SCALE = 0.88
+
+/** "Compact" size shrinks every state except the dot; the window itself stays sized for comfortable. */
+export function geometryFor(state: IslandStateName, size: 'compact' | 'comfortable'): { w: number; h: number; r: number } {
+  const g = islandGeometry[state]
+  if (size === 'comfortable' || state === 'dot' || state === 'hidden') return g
+  const k = ISLAND_COMPACT_SCALE
+  return { w: Math.round(g.w * k), h: Math.round(g.h * k), r: Math.round(g.r * k) }
+}

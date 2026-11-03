@@ -1,5 +1,5 @@
 import { join } from 'node:path'
-import { BrowserWindow, nativeTheme, screen } from 'electron'
+import { app, BrowserWindow, nativeTheme, screen } from 'electron'
 import { islandBounds } from './islandPlacement'
 import { lockDown } from './security'
 
@@ -33,7 +33,8 @@ export function createMainWindow(opts: { bounds?: { x: number; y: number; width:
     titleBarStyle: isMac ? 'hiddenInset' : 'hidden',
     trafficLightPosition: isMac ? { x: 20, y: 20 } : undefined,
     titleBarOverlay: isWin ? { height: 52, color: '#00000000', symbolColor: dark ? '#EDEDE8' : '#141413' } : undefined,
-    backgroundColor: dark ? '#111211' : '#F2F2EF',
+    backgroundColor: dark ? '#0E0F12' : '#F4F1EA',
+    ...(isMac ? {} : { icon: join(app.getAppPath(), 'build', 'icon.png') }),
     webPreferences
   })
   lockDown(win)

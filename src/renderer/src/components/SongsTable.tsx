@@ -1,9 +1,12 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
-import { fillPercent, songQualityLabel, timecode, type LibrarySong, type SongSort } from '@shared/library'
+import { songQualityLabel, timecode, type LibrarySong, type SongSort } from '@shared/library'
 import { applyClick, emptySelection, moveFocus, type Selection } from '@shared/selection'
 import { bridge } from '@/lib/bridge'
 import { useStore } from '@/store'
+import { songMenu } from '@/lib/songActions'
+import { Icon } from './icons'
+import { PurityMeter } from './Purity'
 
 const ROW_H = 48
 const PAGE = 200
@@ -11,13 +14,15 @@ const COLS_KEY = 'flacon.songs.cols'
 const MIN_COL = 96
 
 type Dir = 'asc' | 'desc'
-const COLUMNS: Array<{ key: SongSort | 'n'; label: string; sortable: boolean; align?: 'end' }> = [
+const COLUMNS: Array<{ key: SongSort | 'n' | 'fav'; label: string; sortable: boolean; align?: 'end' }> = [
   { key: 'n', label: '#', sortable: false, align: 'end' },
+  { key: 'fav', label: '', sortable: false },
   { key: 'title', label: 'Title', sortable: true },
   { key: 'artist', label: 'Artist', sortable: true },
   { key: 'album', label: 'Album', sortable: true },
+  { key: 'plays', label: 'Plays', sortable: true, align: 'end' },
   { key: 'duration', label: 'Time', sortable: true, align: 'end' },
-  { key: 'quality', label: 'Quality', sortable: true }
+  { key: 'purity', label: 'Purity', sortable: true }
 ]
 
 function loadWidths(): [number, number, number] {
@@ -30,11 +35,35 @@ function loadWidths(): [number, number, number] {
   return [300, 200, 200]
 }
 
-export function SongsTable({ text }: { text: string }): JSX.Element {
+interface Props {
+  text: string
+  /** 'all', a smart id or 'playlist:<id>'. */
+  scope?: string
+  initialSort?: SongSort
+  initialDir?: Dir
+  playlistId?: number
+}
+
+const EMPTY: Record<string, [string, string]> = {
+  favorites: ['No favourites yet', 'Press the heart on any song and it lands here.'],
+  recent: ['Nothing played yet', 'Songs you listen to show up here, newest first.'],
+  played: ['No plays counted yet', 'A play counts after 30 seconds, or half the song.'],
+  verified: ['Nothing verified yet', 'Flacon is measuring your lossless songs in the background. Verified means 95 % or more of the frequency range is real.'],
+  upscaled: ['Nothing to review', 'No song looks upscaled or padded. Good.'],
+  month: ['Nothing new this month', 'Songs added in the last 30 days appear here.']
+}
+
+export function SongsTable({ text, scope = 'all', initialSort = 'title', initialDir = 'asc', playlistId }: Props): JSX.Element {
   const send = useStore((s) => s.send)
   const libraryVersion = useStore((s) => s.libraryVersion)
-  const [sort, setSort] = useState<SongSort>('title')
-  const [dir, setDir] = useState<Dir>('asc')
+  const activityVersion = useStore((s) => s.activityVersion)
+  const nowPath = useStore((s) => s.pb.track?.path)
+  const openMenu = useStore((s) => s.openMenu)
+  const toggleFavorite = useStore((s) => s.toggleFavorite)
+  const dragFrom = useRef<number | null>(null)
+  const [dropAt, setDropAt] = useState<number | null>(null)
+  const [sort, setSort] = useState<SongSort>(initialSort)
+  const [dir, setDir] = useState<Dir>(initialDir)
   const [total, setTotal] = useState<number | null>(null)
   const [pages, setPages] = useState<Map<number, LibrarySong[]>>(new Map())
   const [sel, setSel] = useState<Selection>(emptySelection)
@@ -53,28 +82,28 @@ export function SongsTable({ text }: { text: string }): JSX.Element {
     setFocus(0)
     setTotal(null)
     scrollRef.current?.scrollTo({ top: 0 })
-  }, [sort, dir, text])
+  }, [sort, dir, text, scope])
 
   // Library changed under us (scan/watch): refetch in place, keep scroll and selection.
   useEffect(() => {
     generation.current++
     inflight.current.clear()
     setPages(new Map())
-  }, [libraryVersion])
+  }, [libraryVersion, activityVersion])
 
   const fetchPage = useCallback(
     (page: number) => {
       if (inflight.current.has(page)) return
       inflight.current.add(page)
       const gen = generation.current
-      void bridge.librarySongs({ sort, dir, text, offset: page * PAGE, limit: PAGE }).then((r) => {
+      void bridge.librarySongs({ sort, dir, text, scope, offset: page * PAGE, limit: PAGE }).then((r) => {
         if (gen !== generation.current) return
         inflight.current.delete(page)
         setTotal(r.total)
         setPages((p) => new Map(p).set(page, r.rows))
       }).catch(() => inflight.current.delete(page))
     },
-    [sort, dir, text]
+    [sort, dir, text, scope]
   )
 
   const count = total ?? 0
@@ -119,19 +148,23 @@ export function SongsTable({ text }: { text: string }): JSX.Element {
     } else if (e.key === 'Enter') {
       e.preventDefault()
       playSelection()
+    } else if ((e.key === 'Delete' || e.key === 'Backspace') && playlistId) {
+      e.preventDefault()
+      const positions = [...sel.indices].map((i) => rowAt(i)?.pos).filter((p): p is number => p !== undefined)
+      if (positions.length) void bridge.libraryCall({ op: 'playlistRemove', id: playlistId, positions })
     } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'a') {
       e.preventDefault()
       setSel({ anchor: 0, indices: new Set(Array.from({ length: count }, (_, i) => i)) })
     }
   }
 
-  const grid = useMemo(() => `40px minmax(${MIN_COL}px, ${widths[0]}fr) minmax(${MIN_COL}px, ${widths[1]}fr) minmax(${MIN_COL}px, ${widths[2]}fr) 64px 168px`, [widths])
+  const grid = useMemo(() => `36px 28px minmax(${MIN_COL}px, ${widths[0]}fr) minmax(${MIN_COL}px, ${widths[1]}fr) minmax(${MIN_COL}px, ${widths[2]}fr) 48px 56px 148px`, [widths])
 
   const toggleSort = (key: SongSort): void => {
     if (key === sort) setDir((d) => (d === 'asc' ? 'desc' : 'asc'))
     else {
       setSort(key)
-      setDir(key === 'duration' || key === 'quality' || key === 'added' ? 'desc' : 'asc')
+      setDir(key === 'duration' || key === 'quality' || key === 'added' || key === 'purity' || key === 'plays' || key === 'lastPlayed' ? 'desc' : 'asc')
     }
   }
 
@@ -166,7 +199,7 @@ export function SongsTable({ text }: { text: string }): JSX.Element {
         ) : (
           <span>{total === null ? 'Loading songs…' : `${total.toLocaleString()} songs`}</span>
         )}
-        <span style={{ marginLeft: 'auto' }}>Shift-click range · Ctrl-click add</span>
+        <span style={{ marginLeft: 'auto' }}>Right-click for more · Shift-click range · {playlistId ? 'Drag to reorder · ' : ''}Enter plays</span>
       </div>
       <div role="grid" aria-label="Songs" aria-multiselectable="true" aria-rowcount={count + 1} className="songs" onKeyDown={onKeyDown} tabIndex={0}>
         <div role="row" className="srow shead t-label" style={{ gridTemplateColumns: grid }}>
@@ -178,7 +211,7 @@ export function SongsTable({ text }: { text: string }): JSX.Element {
                   {c.label}{c.key === sort ? (dir === 'asc' ? ' ↑' : ' ↓') : ''}
                 </button>
               ) : c.label}
-              {i >= 1 && i <= 3 && <span className="grip" role="separator" aria-orientation="vertical" aria-label={`Resize ${c.label} column`} onPointerDown={startResize((i - 1) as 0 | 1 | 2)} />}
+              {i >= 2 && i <= 4 && <span className="grip" role="separator" aria-orientation="vertical" aria-label={`Resize ${c.label} column`} onPointerDown={startResize((i - 2) as 0 | 1 | 2)} />}
             </div>
           ))}
         </div>
@@ -186,8 +219,8 @@ export function SongsTable({ text }: { text: string }): JSX.Element {
           <div role="presentation" style={{ height: virt.getTotalSize(), position: 'relative' }}>
             {total !== null && count === 0 && (
               <div className="empty" role="status" style={{ position: 'absolute', inset: 0, height: 'auto' }}>
-                <h2 className="t-title">{text.trim() ? `Nothing matches “${text}”` : 'No songs yet'}</h2>
-                <p className="ink-2">{text.trim() ? 'Accents and case don’t matter. Try an artist or album name.' : 'Add a music folder from the Albums tab and songs appear here as they are found.'}</p>
+                <h2 className="t-title">{text.trim() ? `Nothing matches “${text}”` : (EMPTY[scope]?.[0] ?? (playlistId ? 'This playlist is empty' : 'No songs yet'))}</h2>
+                <p className="ink-2">{text.trim() ? 'Accents and case don’t matter. Try an artist or album name.' : (EMPTY[scope]?.[1] ?? (playlistId ? 'Right-click any song and choose Add to playlist.' : 'Add a music folder from the Albums tab and songs appear here as they are found.'))}</p>
               </div>
             )}
             {items.map((it) => {
@@ -199,30 +232,57 @@ export function SongsTable({ text }: { text: string }): JSX.Element {
                 return (
                   <div key={it.key} role="row" aria-rowindex={it.index + 2} className="srow" style={pos}>
                     <span className="t-label ink-2" role="gridcell" style={{ textAlign: 'right' }}>{it.index + 1}</span>
-                    <span className="skel" style={{ width: '60%' }} /><span className="skel" style={{ width: '40%' }} /><span className="skel" style={{ width: '40%' }} /><span /><span />
+                    <span /><span className="skel" style={{ width: '60%' }} /><span className="skel" style={{ width: '40%' }} /><span className="skel" style={{ width: '40%' }} /><span /><span /><span />
                   </div>
                 )
               }
-              const up = s.quality === 'upscaled'
+              const isNow = s.path === nowPath
+              const reorder = !!playlistId && sort === 'position' && dir === 'asc'
               return (
-                <div key={it.key} role="row" aria-rowindex={it.index + 2} aria-selected={isSel} className={`srow${isSel ? ' sel' : ''}${it.index === focus ? ' foc' : ''}`}
+                <div key={it.key} role="row" aria-rowindex={it.index + 2} aria-selected={isSel} className={`srow${isSel ? ' sel' : ''}${it.index === focus ? ' foc' : ''}${isNow ? ' now' : ''}${dropAt === it.index ? ' drop' : ''}`}
                   style={{ ...pos, opacity: s.offline ? 0.4 : 1 }}
+                  draggable={reorder}
+                  onDragStart={(e) => { dragFrom.current = it.index; e.dataTransfer.effectAllowed = 'move' }}
+                  onDragOver={(e) => { if (reorder && dragFrom.current !== null) { e.preventDefault(); setDropAt(it.index) } }}
+                  onDragLeave={() => setDropAt((d) => (d === it.index ? null : d))}
+                  onDrop={(e) => {
+                    e.preventDefault()
+                    const from = rowAt(dragFrom.current ?? -1)?.pos
+                    const to = s.pos
+                    dragFrom.current = null
+                    setDropAt(null)
+                    if (playlistId && from !== undefined && to !== undefined && from !== to) void bridge.libraryCall({ op: 'playlistMove', id: playlistId, from, to })
+                  }}
+                  onDragEnd={() => { dragFrom.current = null; setDropAt(null) }}
                   onClick={(e) => { setFocus(it.index); setSel((p) => applyClick(p, it.index, { shift: e.shiftKey, toggle: e.metaKey || e.ctrlKey })) }}
+                  onContextMenu={(e) => {
+                    const inSel = sel.indices.has(it.index)
+                    const idx = inSel ? [...sel.indices].sort((a, b) => a - b) : [it.index]
+                    if (!inSel) { setFocus(it.index); setSel(applyClick(emptySelection, it.index, { shift: false, toggle: false })) }
+                    const rows = idx.map(rowAt).filter((r): r is LibrarySong => !!r)
+                    const positions = rows.map((r) => r.pos).filter((p): p is number => p !== undefined)
+                    openMenu(e, songMenu(rows, playlistId ? { inPlaylist: { id: playlistId, positions } } : {}))
+                  }}
                   onDoubleClick={() => !s.offline && playFrom(it.index)}>
-                  <span className="t-label ink-2" role="gridcell" style={{ textAlign: 'right' }}>{it.index + 1}</span>
+                  <span className="t-label ink-2 num" role="gridcell" style={{ textAlign: 'right' }}>{isNow ? <Icon name="waveform" size={14} /> : it.index + 1}</span>
+                  <span className="cell" role="gridcell">
+                    <button type="button" className={`heart${s.favorite ? ' on' : ''}`} aria-label={s.favorite ? `Remove ${s.title} from Favourites` : `Add ${s.title} to Favourites`} aria-pressed={s.favorite}
+                      onClick={(e) => { e.stopPropagation(); toggleFavorite(s.path, !s.favorite) }} onDoubleClick={(e) => e.stopPropagation()}>
+                      <Icon name="heart" size={16} filled={s.favorite} />
+                    </button>
+                  </span>
                   <span className="cell" role="gridcell" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                     <i className="thumb" style={{ background: s.sleeve }} />
-                    <span className="ell" dir="auto">{s.title}</span>
+                    <span className="ell" dir="auto" style={isNow ? { color: 'var(--accent)', fontWeight: 600 } : undefined}>{s.title}</span>
                     {s.duplicate && <span className="t-label ink-2" title="Another copy of this song is in your library">duplicate</span>}
                   </span>
                   <span className="cell ink-2 ell" role="gridcell" dir="auto">{s.artist}</span>
                   <span className="cell ink-2 ell" role="gridcell" dir="auto">{s.album}</span>
+                  <span className="cell t-label ink-2" role="gridcell" style={{ textAlign: 'right', fontSize: 13 }}>{s.playCount || ''}</span>
                   <span className="cell t-label ink-2" role="gridcell" style={{ textAlign: 'right', fontSize: 13 }}>{timecode(s.durationSec)}</span>
-                  <span className="cell" role="gridcell" style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
-                    <span className="fill" style={{ width: 64, flexShrink: 0, margin: 0, background: up ? 'repeating-linear-gradient(90deg,var(--warn) 0 1px,transparent 1px 4px)' : 'var(--rule)' }}>
-                      <b style={{ width: `${fillPercent(s)}%`, background: s.quality === 'hires' ? 'var(--tint-ink)' : s.quality === 'lossy' ? 'var(--ink-2)' : 'var(--ink)' }} /><i />
-                    </span>
-                    <span className="t-label ell" style={{ color: up ? 'var(--warn)' : 'var(--ink-2)' }}>{songQualityLabel(s)}</span>
+                  <span className="cell" role="gridcell" style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }} title={songQualityLabel(s)}>
+                    <PurityMeter f={s} width={48} />
+                    <span className="t-label ink-2 ell">{s.offline ? 'offline' : s.lossless ? `${s.bitDepth ?? 16}/${+(s.sampleRate / 1000).toFixed(1)}` : s.codec.toUpperCase()}</span>
                   </span>
                 </div>
               )

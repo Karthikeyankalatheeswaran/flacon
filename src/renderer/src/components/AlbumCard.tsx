@@ -1,5 +1,8 @@
 import { motion, type PanInfo } from 'framer-motion'
-import { fillPercent, qualityLabel, type Album } from '@shared/library'
+import { qualityLabel, type Album } from '@shared/library'
+import { albumMenu } from '@/lib/songActions'
+import { useStore } from '@/store'
+import { PurityMeter } from './Purity'
 
 interface Props {
   album: Album
@@ -15,11 +18,9 @@ interface Props {
 const DECEL = 0.998
 
 export function AlbumCard({ album, onRelease, onDragState, vesselLeft, onPlay }: Props): JSX.Element {
-  const hi = album.quality === 'hires'
+  const openMenu = useStore((s) => s.openMenu)
   const up = album.quality === 'upscaled'
   const lossy = album.quality === 'lossy'
-  const flColor = hi ? 'var(--tint-ink)' : lossy ? 'var(--ink-2)' : 'var(--ink)'
-  const track = up ? 'repeating-linear-gradient(90deg,var(--warn) 0 1px,transparent 1px 4px)' : 'var(--rule)'
 
   const release = (_: PointerEvent, info: PanInfo): void => {
     onDragState(false)
@@ -32,6 +33,7 @@ export function AlbumCard({ album, onRelease, onDragState, vesselLeft, onPlay }:
       role="button"
       tabIndex={0}
       onDoubleClick={() => !album.offline && onPlay(album)}
+      onContextMenu={(e) => openMenu(e, albumMenu(album))}
       onKeyDown={(e) => e.key === 'Enter' && !album.offline && onPlay(album)}
       aria-keyshortcuts="Enter"
       drag
@@ -49,13 +51,10 @@ export function AlbumCard({ album, onRelease, onDragState, vesselLeft, onPlay }:
       </div>
       <div className="line1" style={{ fontWeight: 600, marginTop: 12 }} dir="auto">{album.title}</div>
       <div className="line1 ink-2" dir="auto">{album.artist}</div>
-      <div className="fill" role="img" aria-label={up ? 'Upscaled' : hi ? 'Verified hi-res' : lossy ? 'Lossy' : 'CD quality, full'} style={{ background: track }}>
-        <b style={{ width: `${fillPercent(album)}%`, background: flColor }} />
-        <i />
-      </div>
+      <div style={{ marginTop: 8 }}><PurityMeter f={{ purity: album.purity ?? null, lossless: !lossy, upscaled: up }} width={96} /></div>
       <span className="t-label" style={{ color: up ? 'var(--warn)' : 'var(--ink-2)', marginTop: 8 }}>{qualityLabel(album)}</span>
       {/* Name = visible text + this hint, so voice-control users can say what they see (WCAG 2.5.3). */}
-      <span className="sr-only">. Press Enter to play, or drag into the vessel to pour.</span>
+      <span className="sr-only">. Press Enter to play, or drag onto the right panel to add it to the queue.</span>
     </motion.div>
   )
 }

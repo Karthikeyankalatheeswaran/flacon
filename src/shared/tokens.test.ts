@@ -33,7 +33,7 @@ describe.each([['light', light], ['dark', dark]] as const)('%s theme contrast (A
       it(`${ink} on ${surface}`, () => expect(contrast(over(t[ink]!, t[surface]!), t[surface]!)).toBeGreaterThanOrEqual(4.5))
     }
   }
-  for (const c of ['ok', 'warn', 'err', 'tint-ink'] as const) {
+  for (const c of ['ok', 'warn', 'err', 'tint-ink', 'accent'] as const) {
     it(`${c} text on bg`, () => expect(contrast(t[c]!, t['bg']!)).toBeGreaterThanOrEqual(4.5))
     it(`${c} text on sheet`, () => expect(contrast(t[c]!, t['sheet']!)).toBeGreaterThanOrEqual(4.5))
   }

@@ -1,6 +1,6 @@
 {
   "name": "flacon",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Lossless, bottled. Lossless-first music player with a floating island.",
   "private": true,
   "main": "./out/main/index.js",

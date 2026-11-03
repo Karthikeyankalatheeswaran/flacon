@@ -17,6 +17,16 @@ function Row({ label, hint, children }: { label: string; hint?: string; children
   )
 }
 
+function Seg<T extends string>({ label, value, options, onChange }: { label: string; value: T; options: Array<[T, string]>; onChange: (v: T) => void }): JSX.Element {
+  return (
+    <div role="radiogroup" aria-label={label} className="seg">
+      {options.map(([v, l]) => (
+        <button key={v} type="button" role="radio" aria-checked={value === v} onClick={() => onChange(v)}>{l}</button>
+      ))}
+    </div>
+  )
+}
+
 export function SettingsPage(): JSX.Element {
   const settings = useStore((s) => s.settings)
   const update = useStore((s) => s.updateSettings)
@@ -25,6 +35,7 @@ export function SettingsPage(): JSX.Element {
   const addFolder = useStore((s) => s.addFolder)
   const version = useStore((s) => s.libraryVersion)
   const upd = useStore((s) => s.update)
+  const analysis = useStore((s) => s.analysis)
   const [folders, setFolders] = useState<string[] | null>(null)
   const [confirm, setConfirm] = useState<string | null>(null)
 
@@ -58,14 +69,39 @@ export function SettingsPage(): JSX.Element {
           <Row label="Pause when the computer sleeps">
             <input type="checkbox" role="switch" aria-label="Pause when the computer sleeps" checked={settings?.pauseOnSuspend ?? true} onChange={(e) => void update({ pauseOnSuspend: e.target.checked })} />
           </Row>
-          {settings?.platform === 'win32' && (
-            <Row label="Island position" hint="Which screen edge the floating island sits on.">
-              <div role="radiogroup" aria-label="Island position" className="seg">
-                {(['top', 'bottom'] as const).map((e) => (
-                  <button key={e} type="button" role="radio" aria-checked={settings.islandEdge === e} onClick={() => void update({ islandEdge: e })}>{e === 'top' ? 'Top' : 'Bottom'}</button>
-                ))}
-              </div>
-            </Row>
+        </section>
+        <section aria-labelledby="set-play" style={{ marginTop: 32 }}>
+          <h2 id="set-play" className="t-label ink-2 set-h">Playback</h2>
+          <Row label="ReplayGain" hint="Levels loud and quiet records using the gain tags in your files. Songs without tags play untouched; nothing is ever boosted into clipping.">
+            <Seg label="ReplayGain" value={settings?.replayGain ?? 'off'} options={[['off', 'Off'], ['track', 'Track']]} onChange={(v) => void update({ replayGain: v })} />
+          </Row>
+          <Row label="Purity measuring" hint="Flacon decodes a short sample of every lossless song in the background to see how much of its frequency range is real. Nothing leaves your computer.">
+            <span className="t-label ink-2" role="status">{analysis.total > analysis.done ? `${analysis.done.toLocaleString()} of ${analysis.total.toLocaleString()}` : 'Up to date'}</span>
+          </Row>
+        </section>
+        <section aria-labelledby="set-isl" style={{ marginTop: 32 }}>
+          <h2 id="set-isl" className="t-label ink-2 set-h">Flacon Island</h2>
+          <Row label="Show the island" hint="A small floating player at the top of the screen. Hover to open it, click to expand.">
+            <input type="checkbox" role="switch" aria-label="Show the island" checked={settings?.islandEnabled ?? true} onChange={(e) => void update({ islandEnabled: e.target.checked })} />
+          </Row>
+          {settings?.islandEnabled !== false && (
+            <>
+              <Row label="When to show" hint="“While playing” hides it until a song is loaded.">
+                <Seg label="When to show the island" value={settings?.islandMode ?? 'always'} options={[['always', 'Always'], ['playing', 'While playing']]} onChange={(v) => void update({ islandMode: v })} />
+              </Row>
+              <Row label="Size">
+                <Seg label="Island size" value={settings?.islandSize ?? 'comfortable'} options={[['compact', 'Compact'], ['comfortable', 'Comfortable']]} onChange={(v) => void update({ islandSize: v })} />
+              </Row>
+              <Row label="Artwork"><input type="checkbox" role="switch" aria-label="Show artwork in the island" checked={settings?.islandArt ?? true} onChange={(e) => void update({ islandArt: e.target.checked })} /></Row>
+              <Row label="Purity badge" hint="Shows how pure the playing song is.">
+                <input type="checkbox" role="switch" aria-label="Show the purity badge in the island" checked={settings?.islandBadge ?? true} onChange={(e) => void update({ islandBadge: e.target.checked })} />
+              </Row>
+              {settings?.platform === 'win32' && (
+                <Row label="Position" hint="Which screen edge the island sits on.">
+                  <Seg label="Island position" value={settings.islandEdge} options={[['top', 'Top'], ['bottom', 'Bottom']]} onChange={(v) => void update({ islandEdge: v })} />
+                </Row>
+              )}
+            </>
           )}
         </section>
         <section aria-labelledby="set-upd" style={{ marginTop: 32 }}>

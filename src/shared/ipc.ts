@@ -1,7 +1,8 @@
 import { z } from 'zod'
 import type { FetchBridge } from './fetchIpc'
 import type { UpdateStatus } from './update'
-import { SONG_SORTS, type Album, type LibraryProgress, type SongsPage, type SongsQuery } from './library'
+import { SONG_SORTS, type AnalysisProgress, type Album, type LibraryProgress, type LibrarySong, type SongsPage, type SongsQuery } from './library'
+import { SCOPE_RE } from './smart'
 import type { FolderListing } from './folders'
 import type { PlaybackCommand, PlaybackState } from './playback'
 
@@ -33,7 +34,15 @@ export const AppSettingsSchema = z.object({
   pauseOnSuspend: z.boolean(),
   updateChecks: z.boolean(),
   islandEdge: z.enum(['top', 'bottom']),
-  onboarded: z.boolean()
+  onboarded: z.boolean(),
+  islandEnabled: z.boolean(),
+  /** When the island shows: always, only while something is loaded, or never idle. */
+  islandMode: z.enum(['always', 'playing']),
+  islandSize: z.enum(['compact', 'comfortable']),
+  islandArt: z.boolean(),
+  islandBadge: z.boolean(),
+  replayGain: z.enum(['off', 'track']),
+  showLyrics: z.boolean()
 })
 export type AppSettings = z.infer<typeof AppSettingsSchema>
 /** What the settings page needs beyond the editable values. */
@@ -51,6 +60,8 @@ export interface FlaconBridge extends FetchBridge {
   setTheme(theme: ThemeSetting): Promise<void>
   /** Island window: toggles click-through so the transparent area never eats clicks. */
   setIslandInteractive(interactive: boolean): void
+  /** Island: bring the main window forward. */
+  showMain(): void
   onState(cb: (s: AppState) => void): () => void
   getPlayback(): Promise<PlaybackState>
   sendPlayback(cmd: PlaybackCommand): void
@@ -69,6 +80,7 @@ export interface FlaconBridge extends FetchBridge {
   updateAction(op: 'check' | 'download' | 'install'): void
   getSettings(): Promise<AppSettingsInfo>
   setSettings(patch: Partial<AppSettings>): Promise<AppSettingsInfo>
+  onSettings(cb: (s: AppSettingsInfo) => void): () => void
   librarySongs(q: SongsQuery): Promise<SongsPage>
   libraryFolder(dir: string | null): Promise<FolderListing>
   /** Queue the tracks directly in `dir` and start at `index`. */
@@ -76,7 +88,59 @@ export interface FlaconBridge extends FetchBridge {
   getLibraryProgress(): Promise<LibraryProgress>
   onLibraryProgress(cb: (p: LibraryProgress) => void): () => void
   onLibraryChanged(cb: () => void): () => void
+  /** Validated, allow-listed library operations (favourites, playlists, home, stats, lyrics…). */
+  libraryCall<T = unknown>(req: RendererLibraryRequest): Promise<T>
+  /** Resolve a list/album/artist/path source in main and play, shuffle or enqueue it. */
+  libraryPlay(req: PlayRequest): Promise<void>
+  getQueue(): Promise<QueueSnapshot>
+  onQueue(cb: (q: QueueSnapshot) => void): () => void
+  /** Favourite/rating/plays/playlist changes and background purity measurements. */
+  onLibraryActivity(cb: () => void): () => void
+  onAnalysis(cb: (p: AnalysisProgress) => void): () => void
+  /** Native app-menu clicks that the UI must act on ("go:settings", "new-playlist"…). */
+  onMenuAction(cb: (action: string) => void): () => void
+  /** Native file dialogs for playlist import (M3U/M3U8) and export. */
+  playlistIo(req: { op: 'import' } | { op: 'export'; id: number }): Promise<{ ok: boolean; message: string }>
+  /** Show a file in Finder / Explorer. */
+  reveal(path: string): void
 }
+
+/** What the queue panel shows: slim rows, play order. */
+export type QueueItem = Pick<LibrarySong, 'path' | 'title' | 'artist' | 'album' | 'durationSec' | 'artUrl' | 'purity' | 'lossless' | 'favorite' | 'upscaled'>
+export interface QueueSnapshot { rev: number; items: QueueItem[] }
+
+const Paths = z.array(z.string().min(1).max(4096)).max(5000)
+const Id = z.number().int().min(1).max(2_000_000_000)
+export const RendererLibraryRequestSchema = z.discriminatedUnion('op', [
+  z.object({ op: z.literal('setFavorite'), path: z.string().min(1).max(4096), value: z.boolean() }),
+  z.object({ op: z.literal('setRating'), path: z.string().min(1).max(4096), value: z.number().int().min(0).max(5) }),
+  z.object({ op: z.literal('playlists') }),
+  z.object({ op: z.literal('playlistCreate'), name: z.string().max(120), paths: Paths }),
+  z.object({ op: z.literal('playlistRename'), id: Id, name: z.string().max(120) }),
+  z.object({ op: z.literal('playlistDelete'), id: Id }),
+  z.object({ op: z.literal('playlistAdd'), id: Id, paths: Paths }),
+  z.object({ op: z.literal('playlistRemove'), id: Id, positions: z.array(z.number().int().min(0).max(100_000)).max(5000) }),
+  z.object({ op: z.literal('playlistMove'), id: Id, from: z.number().int().min(0).max(100_000), to: z.number().int().min(0).max(100_000) }),
+  z.object({ op: z.literal('lyrics'), path: z.string().min(1).max(4096) }),
+  z.object({ op: z.literal('home') }),
+  z.object({ op: z.literal('stats') }),
+  z.object({ op: z.literal('analysisProgress') }),
+  z.object({ op: z.literal('trackMetas'), paths: Paths })
+])
+export type RendererLibraryRequest = z.infer<typeof RendererLibraryRequestSchema>
+
+export const PlayRequestSchema = z.object({
+  source: z.discriminatedUnion('kind', [
+    z.object({ kind: z.literal('scope'), scope: z.string().regex(SCOPE_RE), text: z.string().max(200).default('') }),
+    z.object({ kind: z.literal('album'), ids: z.array(z.string().regex(/^\d{1,12}$/)).min(1).max(100) }),
+    z.object({ kind: z.literal('artist'), name: z.string().min(1).max(512) }),
+    z.object({ kind: z.literal('paths'), paths: Paths.min(1) })
+  ]),
+  mode: z.enum(['play', 'shuffle', 'next', 'last']),
+  /** For "play": start at this row of the source. */
+  index: z.number().int().min(0).max(1_000_000).optional()
+})
+export type PlayRequest = z.infer<typeof PlayRequestSchema>
 
 export const SearchQuerySchema = z.string().max(200)
 export const FolderDirSchema = z.string().min(1).max(4096).nullable()
@@ -87,12 +151,15 @@ export const AlbumIdSchema = z.string().regex(/^\d{1,12}$/)
 export interface EngineBridge {
   onCommand(cb: (c: PlaybackCommand | { type: 'resume-context' }) => void): () => void
   emitState(s: PlaybackState): void
+  /** Queue contents (play order) whenever they change. */
+  emitQueue(paths: string[], index: number): void
 }
 
 export const SongsQuerySchema = z.object({
   sort: z.enum(SONG_SORTS),
   dir: z.enum(['asc', 'desc']),
   text: z.string().max(200),
+  scope: z.string().regex(SCOPE_RE).optional(),
   offset: z.number().int().min(0).max(10_000_000),
   limit: z.number().int().min(1).max(500)
 })

@@ -165,3 +165,12 @@ Running the fetcher against archive.org for the first time (`E2E_NET=1 npx vites
 
 ### Installers & honest status
 `scripts/package-all.sh` produces `dist/Flacon-0.1.0-mac-{arm64,x64}.dmg` and `Flacon-0.1.0-win-{x64,arm64}-setup.exe` (+ zips). See [docs/packaging.md](docs/packaging.md). **Never executed: any Windows binary. Not done: code signing / notarization (no Apple Developer ID or Authenticode cert), a real update feed, a human VoiceOver/NVDA pass, update install/relaunch.** Planned features: [docs/roadmap.md](docs/roadmap.md).
+
+
+## v0.2 — playlists, queue, purity, island rework
+- **Purity %** on every song/album/player: a background analyser decodes ~20 s from the middle of each lossless file (bundled ffmpeg), finds where the signal stops and how many bits the samples really use. 96 %+ of the Nyquist range reads 100. Lossy files show "Lossy". Verified on a real 24/44.1 FLAC (100 %, 21.5 kHz ceiling, 24 effective bits). It is a heuristic, not proof of provenance.
+- Playlists, queue, favourites, Blends (smart lists), shuffle/repeat, ReplayGain, lyrics, Tonight and Listening pages, context menus, M3U import/export.
+- Native menu bar (macOS: Flacon ▸ Settings… ⌘,), Windows gets the same accelerators.
+- Flacon Island: real artwork, purity badge, animated bars, heart/shuffle/repeat, scrubber; Settings: show/hide, always vs while playing, size, artwork, badge.
+- Icons: Phosphor (MIT, light weight; `docs/PHOSPHOR-LICENSE.txt`). Palette retuned for light and dark with a warm accent.
+- Not implemented: crossfade. See `docs/roadmap.md`.

@@ -67,7 +67,7 @@ describe('axe audit', () => {
       await page.getByRole('button', { name: /^Fetch/ }).first().click()
       await audit(`fetch/${theme}`)
       await page.getByRole('button', { name: 'Library', exact: true }).first().click()
-      await page.getByRole('button', { name: /^EQ/ }).click()
+      await page.getByRole('button', { name: 'Equalizer', exact: true }).click()
       await page.waitForTimeout(800) // let the panel's entrance animation finish: axe would otherwise measure a half-faded colour
       await audit(`eq/${theme}`)
       await page.keyboard.press('Escape')

@@ -3,6 +3,7 @@ export const Channels = {
   getState: 'flacon:get-state',
   setTheme: 'flacon:set-theme',
   island: 'flacon:island',
+  showMain: 'flacon:show-main',
   state: 'flacon:state',
   // playback: UI → main (commands), main → UI (state)
   playbackCommand: 'flacon:playback-command',
@@ -12,6 +13,9 @@ export const Channels = {
   // engine window ↔ main
   engineCommand: 'flacon:engine-command',
   engineState: 'flacon:engine-state',
+  engineQueue: 'flacon:engine-queue',
+  queue: 'flacon:queue',
+  getQueue: 'flacon:get-queue',
   decoderPort: 'flacon:decoder-port',
   // library
   libraryAlbums: 'flacon:library-albums',
@@ -24,6 +28,13 @@ export const Channels = {
   libraryGetProgress: 'flacon:library-get-progress',
   libraryProgress: 'flacon:library-progress',
   libraryChanged: 'flacon:library-changed',
+  libraryActivity: 'flacon:library-activity',
+  libraryAnalysis: 'flacon:library-analysis',
+  libraryCall: 'flacon:library-call',
+  libraryPlay: 'flacon:library-play',
+  menuAction: 'flacon:menu-action',
+  playlistIo: 'flacon:playlist-io',
+  reveal: 'flacon:reveal',
   libraryFolders: 'flacon:library-folders',
   libraryRemoveFolder: 'flacon:library-remove-folder',
   updateGet: 'flacon:update-get',
@@ -31,6 +42,7 @@ export const Channels = {
   updateAction: 'flacon:update-action',
   settingsGet: 'flacon:settings-get',
   settingsSet: 'flacon:settings-set',
+  settingsChanged: 'flacon:settings-changed',
   // fetcher
   fetchSearch: 'flacon:fetch-search',
   fetchEnqueue: 'flacon:fetch-enqueue',

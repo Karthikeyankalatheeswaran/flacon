@@ -31,6 +31,30 @@ const MIGRATIONS: string[] = [
   `
   alter table tracks add column cue_start real;
   alter table tracks add column cue_end real;
+  `,
+  // v3: favourites, ratings, listening history, measured purity, ReplayGain, playlists
+  `
+  alter table tracks add column favorite integer not null default 0;
+  alter table tracks add column rating integer not null default 0;
+  alter table tracks add column last_played integer not null default 0;
+  alter table tracks add column purity real;
+  alter table tracks add column ceiling_hz real;
+  alter table tracks add column eff_bits integer;
+  alter table tracks add column upscaled integer not null default 0;
+  alter table tracks add column analyzed integer not null default 0;
+  alter table tracks add column gain_db real;
+  alter table tracks add column peak real;
+  alter table albums add column purity real;
+  create table playlists (id integer primary key, name text not null, created_at integer not null, updated_at integer not null);
+  create table playlist_tracks (
+    playlist_id integer not null references playlists(id) on delete cascade, pos integer not null, path text not null,
+    primary key (playlist_id, pos)
+  );
+  create index playlist_tracks_path on playlist_tracks(path);
+  create table plays (id integer primary key, path text not null, played_at integer not null, secs real not null);
+  create index plays_at on plays(played_at);
+  create index plays_path on plays(path);
+  create index tracks_pending on tracks(analyzed) where analyzed = 0;
   `
 ]
 

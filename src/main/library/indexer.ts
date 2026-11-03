@@ -20,6 +20,8 @@ export interface Indexer {
   removeFile(path: string): void
   /** Drop every track under `root` in one transaction (a library folder was removed). */
   removeUnder(root: string): void
+  /** Recompute an album's aggregate row (quality, purity) after its tracks changed. */
+  refreshAlbum(id: number): void
 }
 
 /** LIKE pattern for "everything inside `root`": the separator is included so /music doesn't also match /music2. */
@@ -27,6 +29,8 @@ function underRootPattern(root: string): string {
   const esc = (v: string): string => v.replace(/[\\%_]/g, '\\$&')
   return esc(root.replace(/[\\/]+$/, '')) + esc(sep) + '%'
 }
+
+const finite = (v: number | undefined): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null)
 
 export function createIndexer(db: Db, artDir: string): Indexer {
   const q = {
@@ -37,18 +41,18 @@ export function createIndexer(db: Db, artDir: string): Indexer {
         title = case when (case excluded.quality when 'hires' then 2 when 'cd' then 1 else 0 end) > (case albums.quality when 'hires' then 2 when 'cd' then 1 else 0 end) then excluded.title else albums.title end
       returning id`),
     insertTrack: db.prepare(`insert into tracks (path, size, mtime, title, artist, album_artist, album, composer, album_id, disc, disc_total, track, track_total, year, genre, duration,
-      sample_rate, bit_depth, channels, codec, lossless, quality, added_at) values (@path, @size, @mtime, @title, @artist, @albumArtist, @album, @composer, @albumId, @disc, @discTotal, @track, @trackTotal,
-      @year, @genre, @duration, @sampleRate, @bitDepth, @channels, @codec, @lossless, @quality, @now)`),
+      sample_rate, bit_depth, channels, codec, lossless, quality, gain_db, peak, added_at) values (@path, @size, @mtime, @title, @artist, @albumArtist, @album, @composer, @albumId, @disc, @discTotal, @track, @trackTotal,
+      @year, @genre, @duration, @sampleRate, @bitDepth, @channels, @codec, @lossless, @quality, @gainDb, @peak, @now)`),
     updateTrack: db.prepare(`update tracks set path=@path, size=@size, mtime=@mtime, title=@title, artist=@artist, album_artist=@albumArtist, album=@album, composer=@composer, album_id=@albumId,
       disc=@disc, disc_total=@discTotal, track=@track, track_total=@trackTotal, year=@year, genre=@genre, duration=@duration, sample_rate=@sampleRate, bit_depth=@bitDepth, channels=@channels,
-      codec=@codec, lossless=@lossless, quality=@quality, missing=0 where id=@id`),
+      codec=@codec, lossless=@lossless, quality=@quality, gain_db=@gainDb, peak=@peak, analyzed=0, purity=null, upscaled=0, missing=0 where id=@id`),
     ftsDelete: db.prepare('delete from tracks_fts where rowid = ?'),
     ftsInsert: db.prepare('insert into tracks_fts (rowid, title, artist, album, composer) values (?, ?, ?, ?, ?)'),
     delTrack: db.prepare('delete from tracks where id = ?'),
     idByPath: db.prepare('select id, album_id as albumId from tracks where path = ?'),
     aggregate: db.prepare(`select count(*) n, sum(duration) dur, max(case quality when 'hires' then 2 when 'cd' then 1 else 0 end) rank, max(sample_rate) rate,
-      sum(missing = 0) present from tracks where album_id = ?`),
-    setAggregate: db.prepare('update albums set minutes=@minutes, track_count=@n, quality=@quality, ceiling=@ceiling, offline=@offline where id=@id'),
+      sum(missing = 0) present, avg(purity) purity, sum(upscaled) ups from tracks where album_id = ?`),
+    setAggregate: db.prepare('update albums set minutes=@minutes, track_count=@n, quality=@quality, ceiling=@ceiling, offline=@offline, purity=@purity where id=@id'),
     albumArt: db.prepare('update albums set art = coalesce(art, ?) where id = ?'),
     delEmptyAlbums: db.prepare('delete from albums where id not in (select distinct album_id from tracks)'),
     setCue: db.prepare('update tracks set cue_start = ?, cue_end = ? where id = ?'),
@@ -84,10 +88,10 @@ export function createIndexer(db: Db, artDir: string): Indexer {
   }
 
   function refreshAlbum(id: number): void {
-    const a = q.aggregate.get(id) as { n: number; dur: number | null; rank: number | null; rate: number | null; present: number | null }
+    const a = q.aggregate.get(id) as { n: number; dur: number | null; rank: number | null; rate: number | null; present: number | null; purity: number | null; ups: number | null }
     if (!a.n) return
-    const quality: Quality = a.rank === 2 ? 'hires' : a.rank === 1 ? 'cd' : 'lossy'
-    q.setAggregate.run({ id, n: a.n, minutes: Math.round((a.dur ?? 0) / 60), quality, ceiling: (a.rate ?? 0) / 2000, offline: a.present ? 0 : 1 })
+    const quality: Quality = (a.ups ?? 0) > 0 ? 'upscaled' : a.rank === 2 ? 'hires' : a.rank === 1 ? 'cd' : 'lossy'
+    q.setAggregate.run({ id, n: a.n, minutes: Math.round((a.dur ?? 0) / 60), quality, ceiling: (a.rate ?? 0) / 2000, offline: a.present ? 0 : 1, purity: a.purity === null ? null : Math.round(a.purity) })
   }
 
   /** True when an audio file is the source of CUE-sliced tracks (it must not also be listed as one long track). */
@@ -159,7 +163,7 @@ export function createIndexer(db: Db, artDir: string): Indexer {
         const albumId = (q.upsertAlbum.get({ key, title: album, albumArtist, year: sheet.date, tint: hueTint(key), quality, now: Date.now() }) as { id: number }).id
         const row = { path: vpath, size: sz.size, mtime: sz.mtime, title, artist, albumArtist, album, composer: '', albumId, disc: 0, discTotal: 0, track: t.number, trackTotal: usable.length,
           year: sheet.date, genre: sheet.genre, duration: Math.max(0, end - t.startSec), sampleRate: f.sampleRate ?? 0, bitDepth: f.bitsPerSample ?? null, channels: f.numberOfChannels ?? 2,
-          codec: cleanString(f.codec) || (f.container ?? ''), lossless: f.lossless ? 1 : 0, quality, now: Date.now() }
+          codec: cleanString(f.codec) || (f.container ?? ''), lossless: f.lossless ? 1 : 0, quality, gainDb: null, peak: null, now: Date.now() }
         let id = existing?.id
         if (id) {
           q.updateTrack.run({ ...row, id })
@@ -209,7 +213,8 @@ export function createIndexer(db: Db, artDir: string): Indexer {
       const albumId = (q.upsertAlbum.get({ key, title: n.album, albumArtist: n.albumArtist, year: n.year, tint: hueTint(key), quality, now }) as { id: number }).id
       const row = { path, size: st.size, mtime: Math.floor(st.mtimeMs), title: n.title, artist: n.artist, albumArtist: n.albumArtist, album: n.album, composer, albumId,
         disc: disc.no, discTotal: disc.of, track: trk.no, trackTotal: trk.of, year: n.year, genre: n.genre, duration, sampleRate: f.sampleRate ?? 0,
-        bitDepth: f.bitsPerSample ?? null, channels: f.numberOfChannels ?? 2, codec: cleanString(f.codec) || (f.container ?? ''), lossless: f.lossless ? 1 : 0, quality, now }
+        bitDepth: f.bitsPerSample ?? null, channels: f.numberOfChannels ?? 2, codec: cleanString(f.codec) || (f.container ?? ''), lossless: f.lossless ? 1 : 0, quality,
+        gainDb: finite(c.replaygain_track_gain?.dB), peak: finite(c.replaygain_track_peak?.ratio), now }
       let id = existing?.id
       let oldAlbum = existing?.albumId
       if (!id) {
@@ -310,5 +315,5 @@ export function createIndexer(db: Db, artDir: string): Indexer {
     flush()
   }
 
-  return { scanFolder, removeUnder, indexCue, indexFile: async (p) => { await indexFile(p); flush() }, removeFile }
+  return { scanFolder, removeUnder, indexCue, refreshAlbum, indexFile: async (p) => { await indexFile(p); flush() }, removeFile }
 }

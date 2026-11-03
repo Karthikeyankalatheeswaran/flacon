@@ -20,6 +20,10 @@ export interface Album {
   offline?: boolean
   tint: string
   trackCount?: number
+  /** Mean measured purity of the album's tracks; null until measured. */
+  purity?: number | null
+  /** Plain art URL; undefined/null when the album has no artwork. */
+  artUrl?: string | null
 }
 
 export const CD_LIMIT_KHZ = 22.05
@@ -111,7 +115,7 @@ export interface LibraryTrack {
 }
 
 export type LibraryRequest =
-  | { op: 'init'; dbPath: string; artDir: string }
+  | { op: 'init'; dbPath: string; artDir: string; ffmpeg: string }
   | { op: 'folders' }
   | { op: 'addFolder'; path: string }
   | { op: 'removeFolder'; path: string }
@@ -122,13 +126,33 @@ export type LibraryRequest =
   | { op: 'songs'; query: SongsQuery }
   | { op: 'folder'; dir: string | null }
   | { op: 'cueRefs'; paths: string[] }
+  | { op: 'trackMetas'; paths: string[] }
+  | { op: 'setFavorite'; path: string; value: boolean }
+  | { op: 'setRating'; path: string; value: number }
+  | { op: 'recordPlay'; path: string; secs: number }
+  | { op: 'playlists' }
+  | { op: 'playlistCreate'; name: string; paths: string[] }
+  | { op: 'playlistRename'; id: number; name: string }
+  | { op: 'playlistDelete'; id: number }
+  | { op: 'playlistAdd'; id: number; paths: string[] }
+  | { op: 'playlistRemove'; id: number; positions: number[] }
+  | { op: 'playlistMove'; id: number; from: number; to: number }
+  | { op: 'playlistPaths'; id: number }
+  | { op: 'playlistImport'; name: string; paths: string[] }
+  | { op: 'scopePaths'; scope: string; text: string; limit: number }
+  | { op: 'albumPaths'; albumIds: number[] }
+  | { op: 'artistPaths'; artist: string }
+  | { op: 'lyrics'; path: string }
+  | { op: 'home' }
+  | { op: 'stats' }
+  | { op: 'analysisProgress' }
 
 /** Convert a stored art filename into a URL served by the flacon-art:// protocol. */
 export const artUrl = (name: string): string => `flacon-art://art/${name}`
 
 // ---- Songs table ----
 
-export const SONG_SORTS = ['title', 'artist', 'album', 'duration', 'quality', 'added'] as const
+export const SONG_SORTS = ['title', 'artist', 'album', 'duration', 'quality', 'added', 'purity', 'plays', 'lastPlayed', 'rating', 'position'] as const
 export type SongSort = (typeof SONG_SORTS)[number]
 
 export interface SongsQuery {
@@ -136,6 +160,8 @@ export interface SongsQuery {
   dir: 'asc' | 'desc'
   /** Free-text filter (FTS5); empty = all songs. */
   text: string
+  /** Which list: everything, a smart list ("favorites"…) or "playlist:<id>". */
+  scope?: string
   offset: number
   limit: number
 }
@@ -156,7 +182,67 @@ export interface LibrarySong {
   sleeve: string
   /** Another file in the library has the same title, artist and duration (design: duplicates). */
   duplicate: boolean
+  /** Plain art URL for <img> / the island; null when the album has no artwork. */
+  artUrl: string | null
+  lossless: boolean
+  /** Measured purity 0–100, null until the background analyser reaches the file. */
+  purity: number | null
+  /** Highest frequency holding signal, kHz. */
+  ceilingKhz: number | null
+  /** Bits actually used by the samples. */
+  effBits: number | null
+  upscaled: boolean
+  favorite: boolean
+  rating: number
+  playCount: number
+  lastPlayed: number
+  addedAt: number
+  /** ReplayGain track gain in dB, when the file is tagged. */
+  gainDb: number | null
+  /** ReplayGain track peak (linear), when tagged. */
+  peak: number | null
+  /** Position inside a playlist (only for playlist scopes). */
+  pos?: number
 }
+
+export interface Playlist {
+  id: number
+  name: string
+  tracks: number
+  minutes: number
+  /** Artwork of the first track that has some, as a CSS background. */
+  sleeve: string
+  updatedAt: number
+}
+
+export interface HomeData {
+  jumpBackIn: Album[]
+  recentlyAdded: Album[]
+  onRepeat: LibrarySong[]
+  forgotten: LibrarySong[]
+  review: { upscaled: number; measured: number; total: number; avgPurity: number | null }
+}
+
+export interface StatsData {
+  songs: number
+  albums: number
+  artists: number
+  hoursOfMusic: number
+  plays: number
+  hoursListened: number
+  topArtists: Array<{ name: string; plays: number }>
+  topSongs: Array<{ title: string; artist: string; plays: number; path: string }>
+  topAlbums: Array<{ title: string; artist: string; plays: number }>
+  byWeekday: number[]
+  byHour: number[]
+  purity: { pure: number; good: number; limited: number; thin: number; lossy: number; unmeasured: number }
+  measured: number
+  lossless: number
+}
+
+export interface AnalysisProgress { done: number; total: number }
+
+export interface Lyrics { synced: boolean; lines: Array<{ t: number | null; text: string }>; source: 'sidecar' | 'embedded' }
 
 export interface SongsPage {
   total: number

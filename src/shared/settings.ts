@@ -31,6 +31,16 @@ export const SettingsSchema = z.object({
   /** Windows only: which screen edge the island docks to. */
   islandEdge: z.enum(['top', 'bottom']).catch('top'),
   volume: z.number().min(0).max(1).catch(0.8),
+  /** Floating island: on/off, when it shows, size, artwork and the purity badge. */
+  islandEnabled: z.boolean().catch(true),
+  islandMode: z.enum(['always', 'playing']).catch('always'),
+  islandSize: z.enum(['compact', 'comfortable']).catch('comfortable'),
+  islandArt: z.boolean().catch(true),
+  islandBadge: z.boolean().catch(true),
+  replayGain: z.enum(['off', 'track']).catch('off'),
+  showLyrics: z.boolean().catch(false),
+  shuffle: z.boolean().catch(false),
+  repeat: z.enum(['off', 'all', 'one']).catch('off'),
   onboarded: z.boolean().catch(false),
   /** Main-window bounds remembered per display (key = display id + size), so a monitor swap doesn't strand the window. */
   windows: z.record(z.string().max(80), Bounds.catch({ x: 0, y: 0, width: 1280, height: 820, maximized: false })).catch({}),

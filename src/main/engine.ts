@@ -100,15 +100,20 @@ export function sendToEngine(cmd: PlaybackCommand | { type: 'resume-context' }):
   win.webContents.send(Channels.engineCommand, cmd)
 }
 
-/** Validate untrusted renderer input before it reaches the engine. */
-let lastQueue: string[] = []
-/** Paths of the most recently loaded queue (saved with the session at quit). */
-export const currentQueue = (): string[] => lastQueue
+/** Paths of the queue as the engine reports it (play order), saved with the session at quit. */
+let queuePaths: string[] = []
+export const currentQueue = (): string[] => queuePaths
+export const setQueuePaths = (p: string[]): void => { queuePaths = p }
 
 /** Looks up start/end/title for CUE virtual paths (the library DB owns them). */
 type CueLookup = (paths: string[]) => Promise<Array<{ path: string; title: string; startSec: number; endSec: number }>>
 let cueLookup: CueLookup | null = null
 export const setCueLookup = (f: CueLookup): void => { cueLookup = f }
+
+/** ReplayGain tags live in the library DB; refs are stamped with them before the engine sees the queue. */
+type GainLookup = (paths: string[]) => Promise<Array<{ path: string; gainDb: number | null; peak: number | null }>>
+let gainLookup: GainLookup | null = null
+export const setGainLookup = (f: GainLookup): void => { gainLookup = f }
 
 async function resolveCues(tracks: TrackRef[]): Promise<TrackRef[]> {
   const wanted = tracks.filter((t) => !t.cue && isCuePath(t.path)).map((t) => t.path)
@@ -118,19 +123,42 @@ async function resolveCues(tracks: TrackRef[]): Promise<TrackRef[]> {
   return tracks.flatMap((t): TrackRef[] => {
     if (t.cue || !isCuePath(t.path)) return [t]
     const r = found.get(t.path)
-    return r ? [{ path: t.path, file: cueRealPath(t.path), title: r.title, cue: { startSec: r.startSec, endSec: r.endSec } }] : []
+    return r ? [{ ...t, path: t.path, file: cueRealPath(t.path), title: r.title, cue: { startSec: r.startSec, endSec: r.endSec } }] : []
   })
 }
 
+async function stampGain(tracks: TrackRef[]): Promise<TrackRef[]> {
+  if (!gainLookup) return tracks
+  try {
+    const found = new Map((await gainLookup(tracks.filter((t) => t.gainDb === undefined).map((t) => t.path))).map((r) => [r.path, r]))
+    return tracks.map((t) => {
+      const g = found.get(t.path)
+      return g ? { ...t, gainDb: g.gainDb, peak: g.peak } : t
+    })
+  } catch {
+    return tracks // no library yet: play without ReplayGain rather than not at all
+  }
+}
+
+const prepare = async (tracks: TrackRef[]): Promise<TrackRef[]> => stampGain(await resolveCues(tracks))
+
+/** Commands run strictly in the order they arrive, even when some need an async library lookup first. */
+let chain: Promise<void> = Promise.resolve()
+
+/** Validate untrusted renderer input before it reaches the engine. */
 export function dispatch(raw: unknown): void {
   const parsed = PlaybackCommandSchema.safeParse(raw)
   if (!parsed.success) return
   const cmd = parsed.data
-  if (cmd.type !== 'load') return sendToEngine(cmd)
-  lastQueue = cmd.tracks.map((t) => t.path)
-  if (!cmd.tracks.some((t) => isCuePath(t.path))) return sendToEngine(cmd)
-  void resolveCues(cmd.tracks).then((tracks) => {
-    if (tracks.length) sendToEngine({ ...cmd, tracks, index: Math.min(cmd.index, tracks.length - 1) })
+  if (cmd.type !== 'load' && cmd.type !== 'enqueue') {
+    chain = chain.then(() => sendToEngine(cmd))
+    return
+  }
+  chain = chain.then(async () => {
+    const tracks = await prepare(cmd.tracks)
+    if (!tracks.length) return
+    if (cmd.type === 'load') sendToEngine({ ...cmd, tracks, index: Math.min(cmd.index, tracks.length - 1) })
+    else sendToEngine({ ...cmd, tracks })
   })
 }
 

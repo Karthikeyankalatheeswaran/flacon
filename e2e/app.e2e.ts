@@ -94,6 +94,7 @@ describe('app (fresh profile)', () => {
   })
 
   it('lists songs, sorts by a header, and keeps the table accessible', async () => {
+    await page.getByRole('button', { name: 'Library', exact: true }).first().click()
     await page.getByRole('tab', { name: 'Songs' }).click()
     await page.getByRole('grid', { name: 'Songs' }).waitFor()
     await page.getByRole('row', { name: /Moth/ }).waitFor()
@@ -142,14 +143,14 @@ describe('app (fresh profile)', () => {
     await page.getByRole('button', { name: /music/ }).first().click()
     await page.getByRole('button', { name: /Zed/ }).click()
     await page.getByRole('button', { name: /Night Album/ }).click()
-    await page.getByRole('button', { name: /Lantern/ }).click()
+    await page.locator('.row-btn', { hasText: /Lantern/ }).click()
     const s = await until(async () => { const x = await pb(page); return /Lantern/.test(x.track?.title ?? '') && x.status === 'playing' && x })
     expect(s.queueIndex).toBe(1)
     await page.getByRole('tab', { name: 'Albums' }).click()
   })
 
   it('applies an EQ preset through the engine and persists it', async () => {
-    await page.getByRole('button', { name: /^EQ/ }).click()
+    await page.getByRole('button', { name: 'Equalizer', exact: true }).click()
     await page.getByLabel('Preset').selectOption('Vocal')
     const s = await until(async () => { const x = await pb(page); return x.eq.preset === 'Vocal' && x })
     expect(s.eq.enabled).toBe(true)

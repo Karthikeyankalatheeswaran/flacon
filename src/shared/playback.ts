@@ -1,5 +1,8 @@
 import { z } from 'zod'
 import { defaultEq, EqSettingsSchema, type EqSettings } from './eq'
+import type { LibrarySong } from './library'
+import type { RepeatMode } from './queue'
+import type { ReplayGainMode } from './replayGain'
 
 export const AUDIO_EXTENSIONS = ['flac', 'alac', 'm4a', 'wav', 'aiff', 'aif', 'ape', 'wv', 'ogg', 'oga', 'opus', 'mp3', 'aac', 'wma', 'dsf', 'dff'] as const
 
@@ -15,7 +18,10 @@ export const TrackRefSchema = z.object({
   title: z.string().max(512).optional(),
   /** Play only [startSec, endSec) of the file (CUE tracks). `path` stays the virtual path; `file` is what is decoded. */
   cue: CueSliceSchema.optional(),
-  file: z.string().min(1).max(4096).refine(isAudioPath, 'unsupported audio file').optional()
+  file: z.string().min(1).max(4096).refine(isAudioPath, 'unsupported audio file').optional(),
+  /** ReplayGain track gain (dB) and linear peak, filled in by main from the library. */
+  gainDb: z.number().min(-60).max(60).nullable().optional(),
+  peak: z.number().min(0).max(100).nullable().optional()
 })
 export type TrackRef = z.infer<typeof TrackRefSchema>
 
@@ -30,7 +36,15 @@ export const PlaybackCommandSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('seek'), seconds: z.number().min(0).max(36 * 3600) }),
   z.object({ type: z.literal('volume'), slider: z.number().min(0).max(1) }),
   z.object({ type: z.literal('output'), deviceId: z.string().max(512) }),
-  z.object({ type: z.literal('eq'), eq: EqSettingsSchema })
+  z.object({ type: z.literal('eq'), eq: EqSettingsSchema }),
+  z.object({ type: z.literal('enqueue'), tracks: z.array(TrackRefSchema).min(1).max(5000), mode: z.enum(['next', 'last']) }),
+  z.object({ type: z.literal('remove'), index: z.number().int().min(0).max(1_000_000) }),
+  z.object({ type: z.literal('move'), from: z.number().int().min(0).max(1_000_000), to: z.number().int().min(0).max(1_000_000) }),
+  z.object({ type: z.literal('jump'), index: z.number().int().min(0).max(1_000_000) }),
+  z.object({ type: z.literal('clear') }),
+  z.object({ type: z.literal('shuffle'), on: z.boolean() }),
+  z.object({ type: z.literal('repeat'), mode: z.enum(['off', 'all', 'one']) }),
+  z.object({ type: z.literal('replayGain'), mode: z.enum(['off', 'track']) })
 ])
 export type PlaybackCommand = z.infer<typeof PlaybackCommandSchema>
 
@@ -57,11 +71,18 @@ export interface PlaybackState {
   error: string | null
   toast: string | null
   eq: EqSettings
+  shuffle: boolean
+  repeat: RepeatMode
+  replayGain: ReplayGainMode
+  /** Bumps whenever the queue contents change; the UI refetches the queue when it moves. */
+  queueRev: number
+  /** Library facts for the playing track (art, purity…); attached by main, absent for files outside the library. */
+  meta?: LibrarySong | null
 }
 
 export const initialPlayback: PlaybackState = {
   status: 'idle', track: null, positionSec: 0, volume: 0.8, outputRate: 0, outputLatencySec: 0,
-  queueIndex: 0, queueLength: 0, error: null, toast: null, eq: defaultEq
+  queueIndex: 0, queueLength: 0, error: null, toast: null, eq: defaultEq, shuffle: false, repeat: 'off', replayGain: 'off', queueRev: 0, meta: null
 }
 
 /** Perceptual volume: slider 0..1 → −60 dB..0 dB, applied in the float domain. 0 is true silence. */

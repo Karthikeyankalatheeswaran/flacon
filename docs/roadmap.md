@@ -1,10 +1,15 @@
 # Flacon roadmap — Spotify / Apple Music–style features
 
-Flacon is a local-first lossless player. This list takes the features people expect from Spotify and Apple Music and sorts them by whether they fit a local library, what they need, and rough size. Nothing here is built yet. Streaming-catalogue features are deliberately out of scope (licensing), and are marked.
+Flacon is a local-first lossless player. This list takes the features people expect from Spotify and Apple Music and sorts them by whether they fit a local library, what they need, and rough size. Streaming-catalogue features are deliberately out of scope (licensing), and are marked.
 
 Size: S ≈ days, M ≈ 1–2 weeks, L ≈ a month+.
 
-## Tier 1 — core listening (build next)
+## Status (update: v0.2 work)
+**Built:** playlists (create/rename/delete, drag-reorder, M3U/M3U8 import + export), play queue (Up Next: add next/last, jump, remove, drag-reorder, clear), favourites and 1–5 ratings (stored), smart lists as "Blends" (Favourites, Recently played, Most played, Recently added, Verified pure, Added this month, To review), play counts and history (a play counts after 30 s or half the track), shuffle and repeat (off/all/one), ReplayGain (track mode, never clips), lyrics (`.lrc` sidecar or embedded, synced highlight), Home ("Tonight") shelves, Listening stats, native app menu with Settings (⌘,) and keyboard shortcuts, redesigned Flacon Island with settings, and **purity**: a measured percentage of each lossless file's frequency range that holds real signal, shown on every song, album and in the player.
+
+**Not built (still on the list):** crossfade, tag editor, MusicBrainz / cover-art lookup, scrobbling, media keys / Now Playing / SMTC, radio / similar-to-this, daily mixes, output-device picker and exclusive mode, casting, mobile remote, DSD, parametric EQ, star-rating UI (ratings are stored, only hearts are in the UI). Podcasts and internet radio were deliberately left out.
+
+## Tier 1 — core listening
 | Feature | Notes | Size |
 |---|---|---|
 | **Playlists** (create, reorder, drag from Songs/Albums, export/import M3U8) | New `playlists` tables in the library DB (migration v3). Biggest missing basic. | M |

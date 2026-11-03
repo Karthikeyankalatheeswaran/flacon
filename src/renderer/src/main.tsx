@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import '@fontsource-variable/archivo/wght.css'
 import './styles/tokens.css'
 import './styles/shell.css'
+import './styles/features.css'
 import { App } from './App'
 import { initApp } from './store'
 

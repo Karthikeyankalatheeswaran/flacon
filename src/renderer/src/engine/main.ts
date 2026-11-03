@@ -3,6 +3,8 @@
 // routing and navigator.mediaSession. Decoded PCM arrives from the decoder utilityProcess.
 import { EQ_FREQS, EQ_Q, bandType, type EqSettings } from '@shared/eq'
 import { gainFromSlider, initialPlayback, type PlaybackCommand, type PlaybackState, type TrackInfo, type TrackRef } from '@shared/playback'
+import { insertAt, moveItem, nextIndex, removeAt, shuffleAfter, shuffled, type RepeatMode } from '@shared/queue'
+import { replayGainFactor, type ReplayGainMode } from '@shared/replayGain'
 
 interface Stream {
   id: number
@@ -23,6 +25,13 @@ const pendingDecoderMsgs: unknown[] = []
 
 let state: PlaybackState = { ...initialPlayback }
 let queue: TrackRef[] = []
+let original: TrackRef[] = [] // unshuffled order, only meaningful while shuffle is on
+let shuffleOn = false
+let repeat: RepeatMode = 'off'
+let rgMode: ReplayGainMode = 'off'
+let rgFactor = 1 // ReplayGain factor of the track the worklet is playing
+let badRun = 0 // consecutive unplayable tracks (stops repeat-all from looping forever on a dead queue)
+let queueRev = 0
 let index = 0
 let seq = 0
 let want = 0 // newest user-requested stream
@@ -74,6 +83,7 @@ function startTrack(i: number, startSec = 0): void {
   index = i
   closeAll()
   node.port.postMessage({ type: 'flush' })
+  applyReplayGain(queue[i]!)
   const s = openStream(i, startSec)
   want = s.id
   push({ status: wantPlaying ? 'loading' : state.status, queueIndex: i, queueLength: queue.length, positionSec: startSec, error: null })
@@ -101,8 +111,10 @@ function skipBad(s: Stream, message: string): void {
   const name = queue[s.index]?.path.split(/[\\/]/).pop() ?? 'track'
   push({ toast: `Skipped “${name}”: ${message}`, error: message })
   streams.delete(s.id)
+  badRun++
   if (s.id === want || s === current) {
-    if (index + 1 < queue.length) startTrack(index + 1)
+    const ni = nextIndex(index, queue.length, repeat === 'one' ? 'off' : repeat)
+    if (ni !== null && badRun < queue.length) startTrack(ni)
     else {
       closeAll()
       node.port.postMessage({ type: 'flush' })
@@ -147,6 +159,8 @@ function onWorklet(m: Record<string, unknown>): void {
       if (!s) break
       current = s
       index = s.index
+      badRun = 0
+      applyReplayGain(queue[s.index])
       if (s.id !== want) want = s.id // gapless hand-over to the prefetched track
       push({ track: s.info ?? state.track, queueIndex: s.index, status: wantPlaying ? 'playing' : state.status })
       syncMediaSession()
@@ -182,15 +196,18 @@ function creditConsumed(frames: number): void {
 
 function maybePrefetch(): void {
   const cur = current
-  if (!cur?.info || index + 1 >= queue.length) return
-  if ([...streams.values()].some((s) => s.index === index + 1)) return
-  if (cur.info.durationSec - state.positionSec <= PREFETCH_SECONDS) openStream(index + 1, 0)
+  if (!cur?.info) return
+  const ni = nextIndex(index, queue.length, repeat)
+  if (ni === null) return
+  if ([...streams.values()].some((s) => s !== cur && s.index === ni)) return
+  if (cur.info.durationSec - state.positionSec <= PREFETCH_SECONDS) openStream(ni, 0)
 }
 
 function maybeAdvance(buffered: number): void {
   // Current track fully decoded and the ring ran dry, with nothing queued behind it → end of queue.
   if (!current || !current.ended || buffered > 0.02) return
   if ([...streams.values()].some((s) => s !== current)) return
+  if (repeat === 'one') { startTrack(index); return } // gapless restart when the prefetch could not cover it
   wantPlaying = false
   node.port.postMessage({ type: 'pause' })
   silent.pause()
@@ -239,9 +256,44 @@ function applyEq(eq: EqSettings): void {
   push({ eq })
 }
 
+function sendGain(): void {
+  node.port.postMessage({ type: 'gain', value: gainFromSlider(state.volume) * rgFactor })
+}
+
 function setVolume(slider: number): void {
-  node.port.postMessage({ type: 'gain', value: gainFromSlider(slider) })
+  state = { ...state, volume: slider }
+  sendGain()
   push({ volume: slider })
+}
+
+function applyReplayGain(ref: TrackRef | undefined): void {
+  rgFactor = ref ? replayGainFactor(rgMode, ref.gainDb, ref.peak) : 1
+  sendGain()
+}
+
+/** Tell main what the queue holds (play order) so the UI can show and edit it. */
+function publishQueue(): void {
+  queueRev++
+  bridge.emitQueue(queue.map((t) => t.path), index)
+  push({ queueRev, queueLength: queue.length, queueIndex: index })
+}
+
+function setShuffle(on: boolean): void {
+  if (on === shuffleOn) return
+  shuffleOn = on
+  if (on) {
+    original = queue.slice()
+    queue = shuffleAfter(queue, index)
+  } else if (original.length) {
+    const cur = queue[index]
+    const kept = original.filter((t) => queue.includes(t))
+    const added = queue.filter((t) => !original.includes(t))
+    queue = [...kept, ...added]
+    index = Math.max(0, cur ? queue.indexOf(cur) : 0)
+    original = []
+  }
+  push({ shuffle: on })
+  publishQueue()
 }
 
 async function setOutput(deviceId: string): Promise<void> {
@@ -266,18 +318,71 @@ async function onDeviceChange(): Promise<void> {
 
 function handle(c: PlaybackCommand | { type: 'resume-context' }): void {
   switch (c.type) {
-    case 'load':
+    case 'load': {
+      let start = Math.min(c.index, c.tracks.length - 1)
       queue = c.tracks
+      original = []
+      if (shuffleOn) {
+        // Spotify-style: the chosen track plays first, everything else follows in random order.
+        original = queue.slice()
+        const pick = queue[start]!
+        queue = [pick, ...shuffled(queue.filter((_, i) => i !== start))]
+        start = 0
+      }
       wantPlaying = !c.paused
-      startTrack(Math.min(c.index, queue.length - 1), c.startSec ?? 0)
+      startTrack(start, c.startSec ?? 0)
+      publishQueue()
       if (c.paused) push({ status: 'paused' }) // session restore: ready at the saved spot, silent until the user presses play
       else void play()
       break
+    }
     case 'play': void play(); break
     case 'pause': pause(); break
     case 'toggle': state.status === 'playing' || (wantPlaying && state.status === 'loading') ? pause() : void play(); break
-    case 'next': if (index + 1 < queue.length) startTrack(index + 1); break
+    case 'next': {
+      const ni = nextIndex(index, queue.length, repeat === 'one' ? 'all' : repeat) // an explicit skip leaves repeat-one's loop
+      if (ni !== null) startTrack(ni)
+      break
+    }
     case 'prev': startTrack(state.positionSec > 3 || index === 0 ? index : index - 1); break
+    case 'jump': if (c.index < queue.length) { wantPlaying = true; startTrack(c.index); void play() } break
+    case 'enqueue': {
+      if (!queue.length) { handle({ type: 'load', tracks: c.tracks, index: 0 }); break }
+      const at = c.mode === 'next' ? index + 1 : queue.length
+      ;({ queue, index } = insertAt({ queue, index }, at, c.tracks))
+      if (shuffleOn) {
+        const cur = queue[index]
+        const pos = cur ? Math.max(0, original.indexOf(cur)) : original.length - 1
+        original.splice(c.mode === 'next' ? pos + 1 : original.length, 0, ...c.tracks)
+      }
+      publishQueue()
+      break
+    }
+    case 'remove': {
+      const gone = queue[c.index]
+      const wasPlaying = c.index === index
+      ;({ queue, index } = removeAt({ queue, index }, c.index))
+      if (gone && shuffleOn) original = original.filter((t) => t !== gone)
+      if (!queue.length) { closeAll(); node.port.postMessage({ type: 'flush' }); wantPlaying = false; push({ status: 'idle', track: null, positionSec: 0 }) }
+      else if (wasPlaying) startTrack(index) // the row that slid into place starts
+      publishQueue()
+      break
+    }
+    case 'move': {
+      ;({ queue, index } = moveItem({ queue, index }, c.from, c.to))
+      publishQueue()
+      break
+    }
+    case 'clear': {
+      // Keep what is playing; drop everything after it.
+      queue = queue.slice(0, index + 1)
+      if (shuffleOn) original = original.filter((t) => queue.includes(t))
+      publishQueue()
+      break
+    }
+    case 'shuffle': setShuffle(c.on); break
+    case 'repeat': repeat = c.mode; push({ repeat: c.mode }); break
+    case 'replayGain': rgMode = c.mode; push({ replayGain: c.mode }); applyReplayGain(queue[index]); break
     case 'seek': startTrack(index, c.seconds); break // new decode from the target; ring flushed with a 10 ms fade
     case 'volume': setVolume(c.slider); break
     case 'eq': applyEq(c.eq); break

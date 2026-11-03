@@ -12,12 +12,20 @@ import { EqPanel } from './components/EqPanel'
 import { SongsTable } from './components/SongsTable'
 import { ArtistsView } from './components/ArtistsView'
 import { FoldersView } from './components/FoldersView'
+import { HomePage } from './components/HomePage'
+import { ListPage } from './components/ListPage'
+import { PlaylistsPage } from './components/PlaylistsPage'
+import { StatsPage } from './components/StatsPage'
+import { ContextMenu } from './components/ContextMenu'
+import { Sheets } from './components/Sheets'
+import { Toasts } from './components/Toast'
+import { bridge } from '@/lib/bridge'
 
 const TABS = ['Albums', 'Songs', 'Artists', 'Folders'] as const
 type Tab = (typeof TABS)[number]
 
 export function App(): JSX.Element {
-  const { albums, libraryLoaded, search, setSearch, addFolder, playAlbum, pour } = useStore()
+  const { albums, libraryLoaded, search, setSearch, addFolder, playAlbum, pour, play } = useStore()
   const tintHex = useStore((s) => s.albums[0]?.tint)
   const theme = useStore((s) => s.app?.theme ?? 'system')
   const setTheme = useStore((s) => s.setTheme)
@@ -50,6 +58,31 @@ export function App(): JSX.Element {
     shellRef.current?.style.setProperty('--tint', guarded(tintHex))
   }, [tintHex])
 
+  // The native menu (and the tray) ask the UI to navigate or open things.
+  const showLyrics = useStore((s) => s.settings?.showLyrics)
+  const lyricsSeeded = useRef(false)
+  useEffect(() => {
+    if (showLyrics === undefined || lyricsSeeded.current) return
+    lyricsSeeded.current = true
+    if (showLyrics) useStore.getState().setVesselTab('lyrics')
+  }, [showLyrics])
+  useEffect(() => bridge.onMenuAction((a) => {
+    const st = useStore.getState()
+    if (a.startsWith('go:')) st.setPage(a.slice(3) as Parameters<typeof st.setPage>[0])
+    else if (a === 'new-playlist') st.setSheet({ kind: 'new-playlist', paths: [] })
+    else if (a === 'toggle-eq') st.setEqOpen(!st.eqOpen)
+    else if (a === 'toggle-queue') st.setVesselTab('queue')
+    else if (a === 'toggle-lyrics') {
+      const on = st.vesselTab !== 'lyrics'
+      st.setVesselTab(on ? 'lyrics' : 'queue')
+      void st.updateSettings({ showLyrics: on })
+    } else if (a === 'focus-search') {
+      st.setPage('library')
+      window.setTimeout(() => searchRef.current?.focus(), 50)
+    } else if (a === 'add-folder') void st.addFolder()
+    else if (a.startsWith('toast:')) st.showToast(a.slice(6))
+  }), [])
+
   const hi = albums.filter((a) => a.quality === 'hires').length
   const up = albums.filter((a) => a.quality === 'upscaled').length
   const off = albums.filter((a) => a.offline).length
@@ -58,11 +91,11 @@ export function App(): JSX.Element {
   return (
     <div className="shell" ref={shellRef}>
       <a className="skip" href="#content" onClick={(e) => { e.preventDefault(); document.getElementById('content')?.focus() }}>Skip to content</a>
-      <Rail active={page === 'fetch' ? 'Fetch' : page === 'settings' ? 'Settings' : 'Library'} />
+      <Rail />
       <main className="main" id="content" tabIndex={-1}>
-        {page === 'fetch' ? <FetchPage /> : page === 'settings' ? <SettingsPage /> : (
+        {page === 'home' ? <HomePage /> : page === 'fetch' ? <FetchPage /> : page === 'settings' ? <SettingsPage /> : page === 'stats' ? <StatsPage /> : page === 'playlists' ? <PlaylistsPage /> : page === 'list' ? <ListPage /> : (
         <>
-        <div className="titlebar-drag" style={{ height: 'var(--shell-titlebar)', display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
+        <div className="titlebar-drag" style={{ height: 'var(--shell-titlebar)', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', flexShrink: 0 }}>
           <label className="search no-drag">
             <Icon name="search" />
             <input
@@ -91,12 +124,15 @@ export function App(): JSX.Element {
           <>
         <div className="meta t-label ink-2">
           <span>{albums.length.toLocaleString()} albums</span>
-          {albums.length > 0 && <span>{Math.round((hi / albums.length) * 100)}% verified hi-res</span>}
+          {albums.length > 0 && <span>{Math.round((hi / albums.length) * 100)}% hi-res</span>}
           {up > 0 && <span style={{ color: 'var(--warn)' }}>{up} upscaled</span>}
           {off > 0 && <span>{off} offline</span>}
-          <button type="button" className="tab" style={{ marginLeft: 'auto', height: 'auto' }} onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
-            Theme: {theme}
-          </button>
+          <span style={{ marginLeft: 'auto', display: 'flex', gap: 16, alignItems: 'center' }}>
+            <button type="button" className="ghost-btn" disabled={albums.length === 0} onClick={() => void play({ source: { kind: 'scope', scope: 'all', text: search }, mode: 'shuffle' })}><Icon name="shuffle" size={16} /> Shuffle all</button>
+            <button type="button" className="ghost-btn" aria-label={`Appearance: ${theme}. Switch to ${theme === 'dark' ? 'light' : 'dark'}.`} title="Toggle light / dark" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
+              <Icon name={theme === 'dark' ? 'sunIcon' : 'moonIcon'} size={16} />
+            </button>
+          </span>
         </div>
         {!libraryLoaded ? (
           <div className="grid" aria-busy="true" aria-label="Loading library">
@@ -141,6 +177,9 @@ export function App(): JSX.Element {
       <Vessel over={over} />
       {eqOpen && <EqPanel />}
       <Onboarding />
+      <ContextMenu />
+      <Sheets />
+      <Toasts />
     </div>
   )
 }

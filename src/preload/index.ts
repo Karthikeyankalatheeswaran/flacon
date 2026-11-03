@@ -3,8 +3,8 @@ import { Channels } from '@shared/channels'
 import type { UpdateStatus } from '@shared/update'
 import type { FetchJob } from '@shared/fetch'
 import type { FetchSettings } from '@shared/fetchIpc'
-import type { AppState, EngineBridge, FlaconBridge, ThemeSetting } from '@shared/ipc'
-import type { Album, LibraryProgress, SongsPage, SongsQuery } from '@shared/library'
+import type { AppSettingsInfo, AppState, EngineBridge, FlaconBridge, QueueSnapshot, ThemeSetting } from '@shared/ipc'
+import type { AnalysisProgress, Album, LibraryProgress, SongsPage, SongsQuery } from '@shared/library'
 import type { PlaybackCommand, PlaybackState } from '@shared/playback'
 
 // One preload for every window (sandboxed preloads cannot require sibling chunks). Each page only
@@ -19,7 +19,8 @@ function subscribe<T>(channel: string, cb: (v: T) => void): () => void {
 if (location.pathname.endsWith('/engine.html')) {
   const engine: EngineBridge = {
     onCommand: (cb) => subscribe<PlaybackCommand | { type: 'resume-context' }>(Channels.engineCommand, cb),
-    emitState: (s: PlaybackState) => ipcRenderer.send(Channels.engineState, s)
+    emitState: (s: PlaybackState) => ipcRenderer.send(Channels.engineState, s),
+    emitQueue: (paths: string[], index: number) => ipcRenderer.send(Channels.engineQueue, { paths, index })
   }
   contextBridge.exposeInMainWorld('flaconEngine', engine)
   // MessagePorts cannot cross contextBridge; hand the decoder port to the page via postMessage.
@@ -28,6 +29,7 @@ if (location.pathname.endsWith('/engine.html')) {
   const bridge: FlaconBridge = {
     getState: () => ipcRenderer.invoke(Channels.getState),
     setTheme: (t: ThemeSetting) => ipcRenderer.invoke(Channels.setTheme, t),
+    showMain: () => ipcRenderer.send(Channels.showMain),
     setIslandInteractive: (v: boolean) => ipcRenderer.send(Channels.island, v),
     onState: (cb) => subscribe<AppState>(Channels.state, cb),
     getPlayback: () => ipcRenderer.invoke(Channels.getPlayback),
@@ -48,9 +50,19 @@ if (location.pathname.endsWith('/engine.html')) {
     updateAction: (op) => ipcRenderer.send(Channels.updateAction, op),
     getSettings: () => ipcRenderer.invoke(Channels.settingsGet),
     setSettings: (patch) => ipcRenderer.invoke(Channels.settingsSet, patch),
+    onSettings: (cb) => subscribe<AppSettingsInfo>(Channels.settingsChanged, cb),
     getLibraryProgress: (): Promise<LibraryProgress> => ipcRenderer.invoke(Channels.libraryGetProgress),
     onLibraryProgress: (cb) => subscribe<LibraryProgress>(Channels.libraryProgress, cb),
     onLibraryChanged: (cb) => subscribe<null>(Channels.libraryChanged, () => cb()),
+    libraryCall: (req) => ipcRenderer.invoke(Channels.libraryCall, req),
+    libraryPlay: (req) => ipcRenderer.invoke(Channels.libraryPlay, req),
+    getQueue: (): Promise<QueueSnapshot> => ipcRenderer.invoke(Channels.getQueue),
+    onQueue: (cb) => subscribe<QueueSnapshot>(Channels.queue, cb),
+    onLibraryActivity: (cb) => subscribe<null>(Channels.libraryActivity, () => cb()),
+    onAnalysis: (cb) => subscribe<AnalysisProgress>(Channels.libraryAnalysis, cb),
+    onMenuAction: (cb) => subscribe<string>(Channels.menuAction, cb),
+    playlistIo: (req) => ipcRenderer.invoke(Channels.playlistIo, req),
+    reveal: (p: string) => ipcRenderer.send(Channels.reveal, p),
     fetchSearch: (q) => ipcRenderer.invoke(Channels.fetchSearch, q),
     fetchEnqueue: (p) => ipcRenderer.invoke(Channels.fetchEnqueue, p),
     fetchControl: (c) => ipcRenderer.send(Channels.fetchControl, c),
