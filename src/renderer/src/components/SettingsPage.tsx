@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { describeUpdate } from '@shared/update'
 import { bridge } from '@/lib/bridge'
+import { IslandPlacePicker } from './IslandPlacePicker'
 import { useStore } from '@/store'
 
 type Theme = 'system' | 'light' | 'dark'
@@ -99,11 +100,9 @@ export function SettingsPage(): JSX.Element {
               <Row label="Purity badge" hint="Shows how pure the playing song is.">
                 <input type="checkbox" role="switch" aria-label="Show the purity badge in the island" checked={settings?.islandBadge ?? true} onChange={(e) => void update({ islandBadge: e.target.checked })} />
               </Row>
-              {settings?.platform === 'win32' && (
-                <Row label="Position" hint="Which screen edge the island sits on.">
-                  <Seg label="Island position" value={settings.islandEdge} options={[['top', 'Top'], ['bottom', 'Bottom']]} onChange={(v) => void update({ islandEdge: v })} />
-                </Row>
-              )}
+              <Row label="Position" hint="Pick a spot, or drag the island itself: it snaps to the nearest one. Right-click it for the same list.">
+                <IslandPlacePicker />
+              </Row>
             </>
           )}
         </section>

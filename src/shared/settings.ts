@@ -28,8 +28,9 @@ export const SettingsSchema = z.object({
   pauseOnSuspend: z.boolean().catch(true),
   /** Look for new versions in the background (never downloads without a click). */
   updateChecks: z.boolean().catch(true),
-  /** Windows only: which screen edge the island docks to. */
+  /** Where the island sits: screen edge and alignment along it. */
   islandEdge: z.enum(['top', 'bottom']).catch('top'),
+  islandAlign: z.enum(['left', 'center', 'right']).catch('center'),
   volume: z.number().min(0).max(1).catch(0.8),
   /** Floating island: on/off, when it shows, size, artwork and the purity badge. */
   islandEnabled: z.boolean().catch(true),

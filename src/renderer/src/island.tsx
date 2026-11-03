@@ -4,7 +4,7 @@ import { motion, useReducedMotion } from 'framer-motion'
 import { ACTIVITY_DWELL_MS, COLLAPSE_GRACE_MS, ERROR_DWELL_MS, HOVER_INTENT_MS, geometryFor, initialIsland, islandReducer, restFor } from '@shared/islandMachine'
 import type { AppSettingsInfo } from '@shared/ipc'
 import { hueTint } from '@shared/tags'
-import { timecode } from '@shared/library'
+import { placeholderSleeve, timecode } from '@shared/library'
 import { purityBadge, purityTier, type PurityTier } from '@shared/purity'
 import '@fontsource-variable/archivo/wght.css'
 import './styles/tokens.css'
@@ -39,6 +39,9 @@ function Island(): JSX.Element | null {
   const [over, setOver] = useState(false)
   const [drag, setDrag] = useState<number | null>(null)
   const [msg, setMsg] = useState('')
+  // Dragging the pill moves the whole island; it snaps to the nearest of six spots on release.
+  const press = useRef<{ x: number; y: number; moving: boolean } | null>(null)
+  const justMoved = useRef(false)
 
   useEffect(() => {
     void bridge.getSettings().then(setCfg)
@@ -139,7 +142,7 @@ function Island(): JSX.Element | null {
   }
 
   return (
-    <div className="isl-stage">
+    <div className="isl-stage" data-edge={cfg?.islandEdge ?? 'top'} data-align={cfg?.islandAlign ?? 'center'}>
       {/* The dot is 8 px: its hover target is the larger invisible hit area around it. */}
       <motion.div
         role="region"
@@ -151,8 +154,18 @@ function Island(): JSX.Element | null {
         transition={reduce ? { duration: 0.15 } : SPRING}
         onPointerEnter={enter}
         onPointerLeave={leave}
-        onClick={() => dispatch({ type: 'click' })}
-        onContextMenu={(e) => e.preventDefault()}
+        onClick={() => { if (justMoved.current) justMoved.current = false; else dispatch({ type: 'click' }) }}
+        onPointerDown={(e) => { if (e.button === 0 && !(e.target as HTMLElement).closest('button,input')) press.current = { x: e.clientX, y: e.clientY, moving: false } }}
+        onPointerMove={(e) => {
+          const s = press.current
+          if (!s || s.moving || Math.hypot(e.clientX - s.x, e.clientY - s.y) < 8) return
+          s.moving = true
+          e.currentTarget.setPointerCapture(e.pointerId)
+          bridge.islandDrag('start')
+        }}
+        onPointerUp={() => { if (press.current?.moving) { justMoved.current = true; bridge.islandDrag('end') } press.current = null }}
+        onPointerCancel={() => { if (press.current?.moving) bridge.islandDrag('end'); press.current = null }}
+        onContextMenu={(e) => { e.preventDefault(); bridge.islandMenu() }}
       >
         {st === 'dot' ? (
           <div role="img" aria-label="Flacon, nothing playing" className="isl-pip" />
@@ -174,7 +187,7 @@ function Island(): JSX.Element | null {
               ) : (
                 <>
                   {np && showArt && (
-                    <button type="button" className="isl-art" aria-label="Open Flacon" style={{ width: art, height: art, background: meta?.artUrl ? `center / cover url("${meta.artUrl}")` : `linear-gradient(135deg, ${tint}, rgb(237 237 232 / .16))` }}
+                    <button type="button" className="isl-art" aria-label="Open Flacon" style={{ width: art, height: art, background: meta?.artUrl ? `center / cover url("${meta.artUrl}")` : placeholderSleeve(tint) }}
                       onClick={(e) => { e.stopPropagation(); if (full) bridge.showMain(); else dispatch({ type: 'click' }) }} />
                   )}
                   <div className="isl-text">

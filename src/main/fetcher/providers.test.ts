@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { HostLimiter } from '@shared/fetch'
 import type { FetchFn } from './download'
-import { archive, archiveCandidate, chooseFiles, commons, jamendo, link, parseLicense, type Candidate, type ProviderCtx } from './providers'
+import { archive, archiveCandidate, archiveQualityLabel, chooseFiles, queryTokens, rankArchive, commons, jamendo, link, parseLicense, type Candidate, type ProviderCtx } from './providers'
 
 const json = (body: unknown, status = 200): Response => new Response(JSON.stringify(body), { status })
 const ctx = (fn: FetchFn, extra: Partial<ProviderCtx> = {}): ProviderCtx => ({ fetchFn: fn, limiter: new HostLimiter(0), signal: new AbortController().signal, sleep: async () => {}, ...extra })
@@ -25,7 +25,7 @@ describe('archive.org', () => {
     { identifier: 'bad id!', title: 'Weird', licenseurl: 'https://creativecommons.org/licenses/by/4.0/' }
   ] } }
   it('lists only items with a licence we understand and a safe identifier', async () => {
-    const r = await archive.search("it's a band", ctx(async () => json(search)))
+    const r = await archive.search("good band", ctx(async () => json(search)))
     expect(r.map((x) => x.id)).toEqual(['good-album'])
     expect(r[0]!.license!.name).toBe('CC BY 4.0')
   })
@@ -121,5 +121,61 @@ describe('wikimedia commons', () => {
   })
   it('rejects malformed ids', async () => {
     await expect(commons.resolve('https://evil', ctx(async () => json(body)))).rejects.toThrow(/Bad file id/)
+  })
+})
+
+describe('archive search relevance', () => {
+  const lic = { name: 'CC0' }
+  const doc = (id: string, title: string, creator: string, downloads: number, formats: string[]) => ({ id, title, creator, downloads, formats, license: lic })
+
+  it('tokenises with accents, apostrophes and filler words handled', () => {
+    expect(queryTokens("The Miles Davis — Kind of Blue")).toEqual(['miles', 'davis', 'kind', 'blue'])
+    expect(queryTokens("Beyoncé it's")).toEqual(['beyonce', 'its'])
+    expect(queryTokens('the of')).toEqual(['the', 'of']) // all filler: keep it rather than search for nothing
+    expect(queryTokens('   ')).toEqual([])
+  })
+  it('labels what an item holds', () => {
+    expect(archiveQualityLabel(['VBR MP3', '24bit Flac'])).toEqual({ label: '24-bit FLAC', lossless: true })
+    expect(archiveQualityLabel(['Flac', 'Metadata']).label).toBe('FLAC')
+    expect(archiveQualityLabel(['VBR MP3', 'Ogg Vorbis']).label).toBe('MP3')
+    expect(archiveQualityLabel(['Metadata']).label).toBe('')
+    expect(archiveQualityLabel(['Flac', 'VBR MP3'], 'compact').label).toBe('MP3') // Compact fetches the MP3, so that is what it says
+  })
+  it('puts title matches first, prefers lossless, and drops unrelated items', () => {
+    const t = queryTokens('moonlight sonata')
+    const r = rankArchive([
+      doc('noise', 'Sermon 2010', 'St Aidans', 900, ['VBR MP3']),
+      doc('mp3', 'Moonlight Sonata', 'Beethoven', 9000, ['VBR MP3']),
+      doc('flac', 'Moonlight Sonata (Mv. 1)', 'Nils Johnson', 5000, ['Flac']),
+      doc('half', 'Moonlight Serenade', 'Glenn Miller', 100, ['Flac'])
+    ], t, 'best').map((x) => x.id)
+    expect(r[0]).toBe('flac')
+    expect(r).toContain('mp3')
+    expect(r).not.toContain('noise')
+    expect(r).not.toContain('half') // only one of the two words matches
+  })
+  it('keeps subject-only matches for a one-word genre search', () => {
+    const r = rankArchive([{ ...doc('a', 'KXJZ 1/1/11', 'Gary V', 50, ['VBR MP3']), subject: 'jazz; radio' }, doc('b', 'Sermon', 'X', 5, [])], queryTokens('jazz'), 'best')
+    expect(r.map((x) => x.id)).toEqual(['a'])
+  })
+  it('does not reward lossless when the user asked for compact', () => {
+    const t = queryTokens('blue')
+    const r = rankArchive([doc('flac', 'Blue', 'A', 10, ['Flac']), doc('mp3', 'Blue', 'A', 5000, ['VBR MP3'])], t, 'compact').map((x) => x.id)
+    expect(r[0]).toBe('mp3')
+  })
+  it('searches with every word required, then loosens when little is found', async () => {
+    const urls: string[] = []
+    const fn: FetchFn = async (u) => { urls.push(String(u)); return json({ response: { docs: [] } }) }
+    await archive.search('miles davis blue', ctx(fn))
+    expect(urls).toHaveLength(4) // all three words, then each single word dropped in turn
+    expect(decodeURIComponent(urls[0]!)).toContain('(title:miles OR creator:miles OR subject:miles) AND (title:davis')
+    expect(decodeURIComponent(urls[1]!)).not.toContain('title:miles') // "miles" dropped
+    urls.length = 0
+    await archive.search('jazz', ctx(fn))
+    expect(urls).toHaveLength(1) // one word: nothing looser to try
+    urls.length = 0
+    await archive.search('charleston fox trot 1925', ctx(fn))
+    expect(decodeURIComponent(urls[1]!)).not.toContain('1925') // second try drops the year
+    expect(decodeURIComponent(urls[1]!)).toContain('title:trot')
   })
 })

@@ -31,6 +31,8 @@ if (location.pathname.endsWith('/engine.html')) {
     setTheme: (t: ThemeSetting) => ipcRenderer.invoke(Channels.setTheme, t),
     showMain: () => ipcRenderer.send(Channels.showMain),
     setIslandInteractive: (v: boolean) => ipcRenderer.send(Channels.island, v),
+    islandDrag: (phase: 'start' | 'end') => ipcRenderer.send(Channels.islandDrag, phase),
+    islandMenu: () => ipcRenderer.send(Channels.islandMenu),
     onState: (cb) => subscribe<AppState>(Channels.state, cb),
     getPlayback: () => ipcRenderer.invoke(Channels.getPlayback),
     sendPlayback: (c: PlaybackCommand) => ipcRenderer.send(Channels.playbackCommand, c),

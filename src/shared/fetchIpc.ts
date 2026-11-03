@@ -16,7 +16,7 @@ export const FetchSettingsSchema = z.object({
 export type FetchSettings = z.infer<typeof FetchSettingsSchema>
 export const defaultFetchSettings: FetchSettings = { jamendoClientId: '', watchDownloads: false }
 
-export interface SearchHit { provider: z.infer<typeof ProviderIdSchema>; id: string; title: string; artist: string; license?: License }
+export interface SearchHit { provider: z.infer<typeof ProviderIdSchema>; id: string; title: string; artist: string; license?: License; quality?: string }
 export type SearchResponse = { ok: true; results: SearchHit[] } | { ok: false; error: string }
 export type EnqueueResponse = { ok: true; count: number } | { ok: false; error: string }
 

@@ -4,6 +4,8 @@ export const Channels = {
   setTheme: 'flacon:set-theme',
   island: 'flacon:island',
   showMain: 'flacon:show-main',
+  islandDrag: 'flacon:island-drag',
+  islandMenu: 'flacon:island-menu',
   state: 'flacon:state',
   // playback: UI → main (commands), main → UI (state)
   playbackCommand: 'flacon:playback-command',

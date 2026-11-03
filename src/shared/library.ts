@@ -150,6 +150,29 @@ export type LibraryRequest =
 /** Convert a stored art filename into a URL served by the flacon-art:// protocol. */
 export const artUrl = (name: string): string => `flacon-art://art/${name}`
 
+const HEX6 = /^#[0-9a-f]{6}$/i
+/** Mix a #rrggbb colour toward white by `amount` (0–1): the lit corner of a placeholder sleeve. */
+function lift(hex: string, amount: number): string {
+  const n = parseInt(hex.slice(1), 16)
+  const ch = (shift: number): string => Math.round(((n >> shift) & 255) * (1 - amount) + 255 * amount).toString(16).padStart(2, '0')
+  return `#${ch(16)}${ch(8)}${ch(0)}`
+}
+
+/**
+ * CSS `background` for an album with no artwork: the album's tint fading to near-black, with fine concentric
+ * record rings and a centre dot. Deterministic, dependency-free and quiet enough to sit beside real covers.
+ */
+export function placeholderSleeve(tint: string): string {
+  const base = HEX6.test(tint) ? tint : '#3a3d3a'
+  const svg =
+    `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' preserveAspectRatio='xMidYMid slice'>` +
+    `<defs><linearGradient id='g' x1='0' y1='0' x2='1' y2='1'><stop offset='0' stop-color='${lift(base, 0.22)}'/><stop offset='.55' stop-color='${base}'/><stop offset='1' stop-color='#111211'/></linearGradient></defs>` +
+    `<rect width='100' height='100' fill='url(#g)'/>` +
+    `<g fill='none' stroke='#fff' stroke-width='.5'><circle cx='50' cy='50' r='38' stroke-opacity='.10'/><circle cx='50' cy='50' r='30' stroke-opacity='.14'/><circle cx='50' cy='50' r='22' stroke-opacity='.18'/><circle cx='50' cy='50' r='14' stroke-opacity='.22'/></g>` +
+    `<circle cx='50' cy='50' r='2.6' fill='#fff' fill-opacity='.55'/></svg>`
+  return `url("data:image/svg+xml,${svg.replace(/#/g, '%23').replace(/"/g, "'")}") center/cover no-repeat, ${base}`
+}
+
 // ---- Songs table ----
 
 export const SONG_SORTS = ['title', 'artist', 'album', 'duration', 'quality', 'added', 'purity', 'plays', 'lastPlayed', 'rating', 'position'] as const

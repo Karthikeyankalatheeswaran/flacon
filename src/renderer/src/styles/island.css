@@ -1,6 +1,11 @@
 /* Flacon Island. Always black, whatever the app theme; the window is transparent and click-through outside the pill. */
 html, body, #root { background: transparent; }
 .isl-stage { position: fixed; inset: 0; display: flex; justify-content: center; align-items: flex-start; padding-top: 8px; }
+/* Docked to the bottom edge the pill grows upward. */
+.isl-stage[data-edge='bottom'] { align-items: flex-end; padding: 0 0 8px; }
+/* Left / right spots: the pill hugs that side of its window (the window itself sits at the screen edge). */
+.isl-stage[data-align='left'] { justify-content: flex-start; padding-left: 32px; }
+.isl-stage[data-align='right'] { justify-content: flex-end; padding-right: 32px; }
 .isl { position: relative; overflow: hidden; background: #000; color: #ededE8; cursor: default; user-select: none; box-shadow: 0 0 0 .5px rgb(255 255 255 / .14), 0 10px 30px rgb(0 0 0 / .35); font-family: var(--font-ui); }
 /* Invisible, larger hit area so the 8 px dot is reachable. */
 .isl-pip { position: absolute; inset: 0; background: rgb(237 237 232 / .5); }

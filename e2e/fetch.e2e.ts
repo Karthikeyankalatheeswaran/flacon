@@ -47,4 +47,22 @@ describe.skipIf(!net)('fetcher, real network', () => {
     await page.getByRole('button', { name: 'Library', exact: true }).first().click()
     await page.getByText(/Charleston/).first().waitFor({ timeout: 30_000 })
   }, 300_000)
+
+  it('searches accurately: every word matters, lossless-only lists only FLAC/WAV, and each hit says what it holds', async () => {
+    await page.getByRole('button', { name: /^Fetch/ }).first().click()
+    const search = async (q: string, quality: 'Best available' | 'Lossless only' | 'Compact (MP3)'): Promise<string[]> => {
+      await page.getByRole('radio', { name: quality }).click()
+      await page.getByLabel('Search Internet Archive').fill(q)
+      await page.getByRole('button', { name: 'Search' }).click()
+      await page.getByRole('list', { name: 'Results' }).or(page.getByText('No licensed matches')).first().waitFor({ timeout: 30_000 })
+      return page.getByRole('list', { name: 'Results' }).getByRole('listitem').allInnerTexts().catch(() => [])
+    }
+    const lossless = await search('miles davis', 'Lossless only')
+    expect(lossless.length).toBeGreaterThan(0)
+    for (const t of lossless) expect(t).toMatch(/FLAC|WAV/) // the badge
+    const moon = await search('beethoven moonlight sonata', 'Best available')
+    expect(moon.length).toBeGreaterThan(0)
+    expect(moon[0]!.toLowerCase()).toMatch(/moonlight/) // the top hit is about the thing typed, not noise
+    for (const t of moon.slice(0, 5)) expect(t.toLowerCase()).toMatch(/moonlight|beethoven|sonata/)
+  }, 120_000)
 })

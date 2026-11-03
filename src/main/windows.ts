@@ -1,6 +1,6 @@
 import { join } from 'node:path'
 import { app, BrowserWindow, nativeTheme, screen } from 'electron'
-import { islandBounds } from './islandPlacement'
+import { islandBounds, type IslandSpot } from './islandPlacement'
 import { lockDown } from './security'
 
 const isWin = process.platform === 'win32'
@@ -51,16 +51,16 @@ export function createMainWindow(opts: { bounds?: { x: number; y: number; width:
   return win
 }
 
-/** Put the island on the display under the cursor, docked to `edge` (bottom only applies on Windows). */
-export function placeIsland(win: BrowserWindow, edge: 'top' | 'bottom'): void {
+/** Put the island on the display under the cursor, at one of the six spots (top/bottom × left/centre/right). */
+export function placeIsland(win: BrowserWindow, spot: IslandSpot): void {
   const d = screen.getDisplayNearestPoint(screen.getCursorScreenPoint())
-  win.setBounds(islandBounds(d, process.platform, edge))
+  win.setBounds(islandBounds(d, process.platform, spot.edge, spot.align))
 }
 
-export function createIslandWindow(edge: () => 'top' | 'bottom' = () => 'top'): BrowserWindow {
+export function createIslandWindow(spot: () => IslandSpot = () => ({ edge: 'top', align: 'center' })): BrowserWindow {
   const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint())
   const win = new BrowserWindow({
-    ...islandBounds(display, process.platform, edge()),
+    ...islandBounds(display, process.platform, spot().edge, spot().align),
     frame: false,
     transparent: true,
     resizable: false,
@@ -81,7 +81,7 @@ export function createIslandWindow(edge: () => 'top' | 'bottom' = () => 'top'): 
   win.once('ready-to-show', () => win.showInactive())
   load(win, 'island')
 
-  const replace = (): void => placeIsland(win, edge())
+  const replace = (): void => placeIsland(win, spot())
   screen.on('display-added', replace)
   screen.on('display-removed', replace)
   screen.on('display-metrics-changed', replace)

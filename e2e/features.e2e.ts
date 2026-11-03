@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { _electron as electron, type ElectronApplication, type Page } from 'playwright-core'
@@ -132,6 +132,55 @@ describe('features', () => {
     await until(async () => !app.windows().some((w) => w.url().endsWith('/island.html')))
     await call(page, (f) => f.setSettings({ islandEnabled: true }))
     await until(async () => app.windows().some((w) => w.url().endsWith('/island.html')))
+  })
+
+  it('places the island at all six spots, on screen, and the picker in Settings drives it', async () => {
+    const bounds = (): Promise<{ b: { x: number; y: number; width: number; height: number }; w: { x: number; y: number; width: number; height: number } }> =>
+      app.evaluate(({ BrowserWindow, screen }) => {
+        const win = BrowserWindow.getAllWindows().find((x) => x.webContents.getURL().endsWith('/island.html'))!
+        const b = win.getBounds()
+        return { b, w: screen.getDisplayNearestPoint({ x: b.x + b.width / 2, y: b.y + b.height / 2 }).workArea }
+      })
+    for (const [edge, align] of [['top', 'left'], ['top', 'right'], ['bottom', 'left'], ['bottom', 'center'], ['bottom', 'right'], ['top', 'center']] as const) {
+      await page.evaluate(`window.flacon.setSettings(${JSON.stringify({ islandEdge: edge, islandAlign: align })})`)
+      await until(async () => {
+        const { b, w } = await bounds()
+        if (align === 'left' && b.x !== w.x + 12) return false
+        if (align === 'right' && b.x + b.width !== w.x + w.width - 12) return false
+        if (edge === 'bottom' && b.y + b.height !== w.y + w.height) return false
+        if (edge === 'top' && b.y > w.y) return false // flush with the work area, or the physical top on a notched Mac
+        return true
+      })
+      const island = app.windows().find((x) => x.url().endsWith('/island.html'))!
+      await until(async () => (await island.locator('.isl-stage').getAttribute('data-edge')) === edge && (await island.locator('.isl-stage').getAttribute('data-align')) === align)
+    }
+    // The Settings picker is a labelled radio group that reflects and changes the same setting.
+    await page.getByRole('radio', { name: 'Bottom right' }).click()
+    await until(async () => (await page.evaluate('window.flacon.getSettings()') as { islandEdge: string; islandAlign: string }).islandAlign === 'right')
+    expect(await page.getByRole('radio', { name: 'Bottom right' }).getAttribute('aria-checked')).toBe('true')
+    await page.evaluate(`window.flacon.setSettings(${JSON.stringify({ islandEdge: 'top', islandAlign: 'center' })})`)
+  })
+
+  it('dropped paths are validated in main: audio files play, everything else is ignored', async () => {
+    const note = join(root, 'notes.txt')
+    writeFileSync(note, 'not music')
+    const pick = async (path: string): Promise<{ folders: number; files: number; ignored: number }> => {
+      await page.evaluate(() => { const i = document.createElement('input'); i.type = 'file'; i.id = 'e2e-drop'; document.body.appendChild(i) })
+      await page.locator('#e2e-drop').setInputFiles(path)
+      const r = (await page.evaluate("(() => { const f = document.getElementById('e2e-drop').files; return window.flacon.libraryAddDropped([...f]) })()")) as { folders: number; files: number; ignored: number }
+      await page.evaluate(() => document.getElementById('e2e-drop')?.remove())
+      return r
+    }
+    expect(await pick(note)).toEqual({ folders: 0, files: 0, ignored: 1 })
+    const song = (await all(page))[0]!.path
+    expect(await pick(song)).toEqual({ folders: 0, files: 1, ignored: 0 })
+    await until(async () => (await call(page, (f) => f.getPlayback())).status === 'playing')
+  })
+
+  it('albums without cover art get the generated placeholder sleeve', async () => {
+    const albums = (await page.evaluate('window.flacon.libraryAlbums()')) as Array<{ sleeve: string; artUrl: string | null }>
+    expect(albums.length).toBeGreaterThan(0)
+    for (const a of albums.filter((x) => !x.artUrl)) expect(a.sleeve).toMatch(/^url\("data:image\/svg\+xml,/)
   })
 
   it('the island has a close button that hides it and turns the setting off', async () => {

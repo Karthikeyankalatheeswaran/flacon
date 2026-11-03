@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { useStore } from '@/store'
+import { IslandPlacePicker } from './IslandPlacePicker'
 
 // First run only: one sheet, two choices, always skippable. Shown once (`onboarded`), never blocks playback.
 export function Onboarding(): JSX.Element | null {
@@ -31,6 +32,12 @@ export function Onboarding(): JSX.Element | null {
         <p className="ink-2">A player for people who care how their music sounds. Flacon reads your folders, plays lossless audio exactly as recorded, and tells you honestly what each record is.</p>
         {empty && (
           <button ref={first} type="button" className="primary" onClick={() => void addFolder()}>Choose your music folder…</button>
+        )}
+        {settings.islandEnabled && (
+          <div style={{ margin: '16px 0 0' }}>
+            <p className="t-label ink-2" style={{ margin: '0 0 8px' }}>Where should the Flacon island sit? You can change this any time, or drag it.</p>
+            <IslandPlacePicker />
+          </div>
         )}
         {settings.canLaunchAtLogin && (
           <label style={{ display: 'flex', gap: 8, alignItems: 'center', margin: '16px 0' }}>

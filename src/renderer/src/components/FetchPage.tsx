@@ -153,6 +153,7 @@ export function FetchPage(): JSX.Element {
                     <span className="ell" dir="auto" style={{ fontWeight: 600 }}>{h.title}</span>
                     <span className="t-label ink-2 ell" dir="auto">{h.artist}</span>
                   </div>
+                  {h.quality && <span className="t-label hit-q" data-lossless={/FLAC|WAV/.test(h.quality) ? '' : undefined}>{h.quality}</span>}
                   <span className="t-label ink-2" title={h.license?.attribution}>{h.license?.name}</span>
                   <button type="button" className="primary" disabled={adding === h.id} onClick={() => void add(h)}>{adding === h.id ? 'Adding…' : 'Fetch'}</button>
                 </li>

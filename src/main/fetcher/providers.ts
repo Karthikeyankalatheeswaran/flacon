@@ -11,6 +11,8 @@ export interface SearchResult {
   title: string
   artist: string
   license?: License
+  /** Best encoding the item is known to hold, e.g. "24-bit FLAC" or "MP3". Shown so the choice is informed. */
+  quality?: string
 }
 
 export interface ProviderCtx {
@@ -109,20 +111,83 @@ export function chooseFiles(cands: Candidate[], quality: Quality): Candidate[] {
 
 const QUALITY_HINT: Record<Quality, string> = { best: 'no audio files', lossless: 'no FLAC files (try “Best available”)', compact: 'no MP3 or Ogg files (try “Best available”)' }
 
+const fold = (x: string): string => x.normalize('NFKD').replace(/\p{M}/gu, '').toLowerCase()
+const STOP = new Set(['the', 'a', 'an', 'of', 'and', 'in', 'on', 'by', 'for', 'to'])
+
+/** Words of a query, accent- and case-folded. Filler words are dropped unless they are all there is. */
+export function queryTokens(query: string): string[] {
+  const all = fold(query).replace(/['’]/g, '').split(/[^\p{L}\p{N}]+/u).filter(Boolean)
+  const key = all.filter((t) => !STOP.has(t))
+  return [...new Set(key.length ? key : all)].slice(0, 8)
+}
+
+const coverage = (tokens: string[], text: string): number => (tokens.length ? tokens.filter((t) => text.includes(t)).length / tokens.length : 0)
+
+/** What an Internet Archive item is known to hold, from its list of file formats. */
+export function archiveQualityLabel(formats: string[], quality: Quality = 'best'): { label: string; lossless: boolean } {
+  const f = formats.join(' | ').toLowerCase()
+  if (quality === 'compact') return /mp3/.test(f) ? { label: 'MP3', lossless: false } : /ogg/.test(f) ? { label: 'Ogg', lossless: false } : { label: '', lossless: false }
+  if (/flac/.test(f)) return { label: /24/.test(f) ? '24-bit FLAC' : 'FLAC', lossless: true }
+  if (/wave|\bwav\b|aiff/.test(f)) return { label: 'WAV', lossless: true }
+  if (/mp3/.test(f)) return { label: 'MP3', lossless: false }
+  if (/ogg/.test(f)) return { label: 'Ogg', lossless: false }
+  return { label: '', lossless: false }
+}
+
+interface ArchiveDoc { id: string; title: string; creator: string; subject?: string; downloads: number; formats: string[]; license: License }
+
+/** Order hits by how well they match the words typed, then by lossless availability and popularity. Pure, so unit-tested. */
+export function rankArchive(docs: ArchiveDoc[], tokens: string[], quality: Quality, typed = tokens.join(' ')): Array<ArchiveDoc & { score: number }> {
+  const words = (s: string): string => fold(s).replace(/['’]/g, '').replace(/[^\p{L}\p{N}]+/gu, ' ').trim()
+  const phrase = words(typed)
+  return docs
+    .map((d) => {
+      const title = fold(d.title)
+      const creator = fold(d.creator)
+      const cov = Math.max(coverage(tokens, title), coverage(tokens, `${title} ${creator}`) * 0.9)
+      const q = archiveQualityLabel(d.formats)
+      const score =
+        100 * coverage(tokens, title) + 60 * coverage(tokens, creator) + 40 * cov + (phrase && words(d.title).includes(phrase) ? 30 : 0) +
+        20 * coverage(tokens, fold(d.subject ?? '')) + (quality !== 'compact' && q.lossless ? 70 : 0) + (quality !== 'compact' && q.label === '24-bit FLAC' ? 5 : 0) +
+        6 * Math.log10(d.downloads + 1)
+      return { ...d, score }
+    })
+    // With several words, most must be found: "kind of blue" should not return every item that merely says "blue".
+    .filter((d) => coverage(tokens, `${fold(d.title)} ${fold(d.creator)} ${fold(d.subject ?? '')}`) >= (tokens.length > 1 ? Math.ceil(tokens.length * 0.6) / tokens.length : 0.01))
+    .sort((a, b) => b.score - a.score)
+}
+
 export const archive: Provider = {
   id: 'archive',
   name: 'Internet Archive',
   blurb: 'Public-domain and Creative Commons audio. FLAC where the item has it, MP3 or Ogg otherwise.',
   async search(query, ctx) {
     const q = ctx.quality ?? 'best'
+    const tokens = queryTokens(query)
+    if (!tokens.length) return []
     const clause = q === 'lossless' ? ' AND format:FLAC' : q === 'compact' ? ' AND (format:"VBR MP3" OR format:"128Kbps MP3" OR format:"Ogg Vorbis")' : ''
-    const text = `(${query.replace(/[^\p{L}\p{N}\s'-]/gu, ' ')}) AND mediatype:audio${clause} AND licenseurl:[* TO *]`
-    const j = (await getJson(`https://archive.org/advancedsearch.php?q=${enc(text)}&fl[]=identifier&fl[]=title&fl[]=creator&fl[]=licenseurl&rows=20&output=json`, ctx)) as { response?: { docs?: Array<Record<string, unknown>> } }
-    return (j.response?.docs ?? []).flatMap((d) => {
-      const license = parseLicense(str(d['licenseurl']))
-      if (!license || !/^[\w.-]+$/.test(str(d['identifier']))) return [] // only items with a licence we understand
-      return [{ provider: 'archive' as const, id: str(d['identifier']), title: str(d['title']) || str(d['identifier']), artist: str(d['creator']), license }]
-    })
+    const base = ` AND mediatype:audio${clause} AND licenseurl:[* TO *]`
+    // Every word must appear somewhere in the title, artist or subject.
+    const allOf = (ts: string[]): string => ts.map((t) => `(title:${t} OR creator:${t} OR subject:${t})`).join(' AND ') + base
+    const fetchDocs = async (text: string): Promise<ArchiveDoc[]> => {
+      const j = (await getJson(`https://archive.org/advancedsearch.php?q=${enc(text)}&fl[]=identifier&fl[]=title&fl[]=creator&fl[]=licenseurl&fl[]=subject&fl[]=format&fl[]=downloads&rows=50&output=json`, ctx)) as { response?: { docs?: Array<Record<string, unknown>> } }
+      return (j.response?.docs ?? []).flatMap((d) => {
+        const license = parseLicense(str(d['licenseurl']))
+        if (!license || !/^[\w.-]+$/.test(str(d['identifier']))) return [] // only items with a licence we understand
+        const formats = Array.isArray(d['format']) ? d['format'].map(String) : []
+        return [{ id: str(d['identifier']), title: str(d['title']) || str(d['identifier']), creator: str(d['creator']), subject: Array.isArray(d['subject']) ? d['subject'].join(' ') : str(d['subject']), downloads: Number(str(d['downloads'])) || 0, formats, license }]
+      })
+    }
+    let docs = await fetchDocs(allOf(tokens))
+    // Too few? Loosen gradually: first without year-like numbers (a year is rarely in the title), then with each single word dropped.
+    const widen = async (ts: string[]): Promise<void> => {
+      const seen = new Set(docs.map((d) => d.id))
+      docs = [...docs, ...(await fetchDocs(allOf(ts))).filter((d) => !seen.has(d.id))]
+    }
+    const words = tokens.filter((t) => !/^\d+$/.test(t))
+    if (docs.length < 8 && words.length && words.length < tokens.length) await widen(words)
+    if (docs.length < 8 && words.length >= 3) for (let i = 0; i < Math.min(words.length, 5) && docs.length < 20; i++) await widen(words.filter((_, j) => j !== i))
+    return rankArchive(docs, tokens, q, query).slice(0, 20).map((d) => ({ provider: 'archive' as const, id: d.id, title: d.title, artist: d.creator, license: d.license, quality: archiveQualityLabel(d.formats, q).label || undefined }))
   },
   async resolve(id, ctx) {
     if (!/^[\w.-]+$/.test(id)) throw new ProviderError('Bad item id.')

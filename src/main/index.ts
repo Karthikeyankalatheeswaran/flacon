@@ -3,7 +3,7 @@ import { promises as fsp } from 'node:fs'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { basename, dirname, extname, isAbsolute, resolve as resolvePath } from 'node:path'
-import { app, BrowserWindow, dialog, ipcMain, nativeImage, nativeTheme, net, powerMonitor, powerSaveBlocker, protocol, screen, shell } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, nativeTheme, net, powerMonitor, powerSaveBlocker, protocol, screen, shell } from 'electron'
 import { AppSettingsSchema, type AppSettings, type AppSettingsInfo } from '@shared/ipc'
 import { displayKey, isVisibleOn, type WindowBounds } from '@shared/settings'
 import { UpdateActionSchema } from '@shared/ipc'
@@ -24,6 +24,7 @@ import { artDir, call as libraryCall, getProgress, startLibrary, stopLibrary } f
 import { installCsp } from './security'
 import { createTray, updateTray } from './tray'
 import { createIslandWindow, createMainWindow, placeIsland } from './windows'
+import { ISLAND_SPOTS, ISLAND_WINDOW, nearestSpot, type IslandSpot } from './islandPlacement'
 
 // Unpackaged runs would otherwise be called "Electron" in the menu bar and Dock.
 if (!app.isPackaged) app.setName('Flacon')
@@ -119,7 +120,7 @@ function applyLoginItem(enabled: boolean): void {
 function settingsInfo(): AppSettingsInfo {
   const s = settings.get()
   return {
-    launchAtLogin: s.launchAtLogin, pauseOnSuspend: s.pauseOnSuspend, updateChecks: s.updateChecks, islandEdge: s.islandEdge, onboarded: s.onboarded,
+    launchAtLogin: s.launchAtLogin, pauseOnSuspend: s.pauseOnSuspend, updateChecks: s.updateChecks, islandEdge: s.islandEdge, islandAlign: s.islandAlign, onboarded: s.onboarded,
     islandEnabled: s.islandEnabled, islandMode: s.islandMode, islandSize: s.islandSize, islandArt: s.islandArt, islandBadge: s.islandBadge, replayGain: s.replayGain, crossfade: s.crossfade, showLyrics: s.showLyrics,
     recovered: settings.recoveredFrom !== null, canLaunchAtLogin: app.isPackaged, platform: process.platform as AppState['platform']
   }
@@ -164,7 +165,8 @@ const trayDeps = {
     mainWin.show()
     mainWin.focus()
   },
-  quit: () => app.quit()
+  quit: () => app.quit(),
+  islandSpots: () => positionItems()
 }
 
 /** Show the main window, then tell the UI what to do (the native menu's job). */
@@ -175,10 +177,38 @@ function ui(action: string): void {
   else send()
 }
 
+const islandSpot = (): IslandSpot => ({ edge: settings.get().islandEdge, align: settings.get().islandAlign })
+const SPOT_LABEL: Record<string, string> = { 'top-left': 'Top left', 'top-center': 'Top centre', 'top-right': 'Top right', 'bottom-left': 'Bottom left', 'bottom-center': 'Bottom centre', 'bottom-right': 'Bottom right' }
+
+/** Radio items for the six island spots (tray menu and the island's own right-click menu). */
+function positionItems(): Electron.MenuItemConstructorOptions[] {
+  const cur = islandSpot()
+  return ISLAND_SPOTS.map((s) => ({
+    label: SPOT_LABEL[`${s.edge}-${s.align}`]!,
+    type: 'radio' as const,
+    checked: s.edge === cur.edge && s.align === cur.align,
+    click: () => setIslandSpot(s)
+  }))
+}
+
+function setIslandSpot(s: IslandSpot): void {
+  applySettings({ islandEdge: s.edge, islandAlign: s.align })
+}
+
+let dragTimer: NodeJS.Timeout | null = null
+function endIslandDrag(snap: boolean): void {
+  if (dragTimer) clearInterval(dragTimer)
+  dragTimer = null
+  if (!islandWin || islandWin.isDestroyed()) return
+  const p = screen.getCursorScreenPoint()
+  if (snap) setIslandSpot(nearestSpot(screen.getDisplayNearestPoint(p), p))
+  else placeIsland(islandWin, islandSpot())
+}
+
 /** Create or destroy the floating island to match the setting. */
 function syncIsland(): void {
   const on = settings.get().islandEnabled
-  if (on && (!islandWin || islandWin.isDestroyed())) islandWin = createIslandWindow(() => settings.get().islandEdge)
+  if (on && (!islandWin || islandWin.isDestroyed())) islandWin = createIslandWindow(islandSpot)
   else if (!on && islandWin && !islandWin.isDestroyed()) {
     islandWin.destroy()
     islandWin = null
@@ -339,6 +369,21 @@ async function addPaths(paths: string[]): Promise<AddPathsResult> {
   return out
 }
 
+/** Apply a validated settings patch everywhere it matters, then tell every window. */
+function applySettings(patch: Partial<AppSettings>): AppSettingsInfo {
+  settings.set(patch)
+  if (patch.launchAtLogin !== undefined) applyLoginItem(patch.launchAtLogin)
+  if ((patch.islandEdge !== undefined || patch.islandAlign !== undefined) && islandWin && !islandWin.isDestroyed()) placeIsland(islandWin, islandSpot())
+  if (patch.islandEnabled !== undefined) syncIsland()
+  if (patch.replayGain !== undefined) dispatch({ type: 'replayGain', mode: patch.replayGain })
+  if (patch.crossfade !== undefined) dispatch({ type: 'crossfade', seconds: patch.crossfade })
+  const info = settingsInfo()
+  for (const w of uiWindows()) w.webContents.send(Channels.settingsChanged, info)
+  forceMenu(menuDeps)
+  if (patch.islandEdge !== undefined || patch.islandAlign !== undefined) updateTray(playback, trayDeps, mainWin) // refresh the radio ticks
+  return info
+}
+
 function registerIpc(): void {
   ipcMain.handle(Channels.getState, () => snapshot())
   ipcMain.handle(Channels.setTheme, (_e, raw: unknown) => {
@@ -401,18 +446,28 @@ function registerIpc(): void {
     else installUpdate()
   })
   ipcMain.handle(Channels.settingsGet, () => settingsInfo())
-  ipcMain.handle(Channels.settingsSet, (_e, raw: unknown) => {
-    const patch = AppSettingsSchema.partial().parse(raw) as Partial<AppSettings>
-    settings.set(patch)
-    if (patch.launchAtLogin !== undefined) applyLoginItem(patch.launchAtLogin)
-    if (patch.islandEdge !== undefined && islandWin && !islandWin.isDestroyed()) placeIsland(islandWin, patch.islandEdge)
-    if (patch.islandEnabled !== undefined) syncIsland()
-    if (patch.replayGain !== undefined) dispatch({ type: 'replayGain', mode: patch.replayGain })
-    if (patch.crossfade !== undefined) dispatch({ type: 'crossfade', seconds: patch.crossfade })
-    const info = settingsInfo()
-    for (const w of uiWindows()) w.webContents.send(Channels.settingsChanged, info)
-    forceMenu(menuDeps)
-    return info
+  ipcMain.handle(Channels.settingsSet, (_e, raw: unknown) => applySettings(AppSettingsSchema.partial().parse(raw) as Partial<AppSettings>))
+  // Island: drag to reposition (main follows the cursor; the pill snaps to the nearest spot on drop) and its right-click menu.
+  ipcMain.on(Channels.islandDrag, (e, raw: unknown) => {
+    if (!islandWin || islandWin.isDestroyed() || e.sender !== islandWin.webContents) return
+    if (raw === 'start') {
+      if (dragTimer) clearInterval(dragTimer)
+      const started = Date.now()
+      dragTimer = setInterval(() => {
+        if (!islandWin || islandWin.isDestroyed() || Date.now() - started > 30_000) return endIslandDrag(false)
+        const p = screen.getCursorScreenPoint()
+        islandWin.setPosition(Math.round(p.x - ISLAND_WINDOW.width / 2), Math.round(p.y - 30))
+      }, 16)
+    } else if (raw === 'end') endIslandDrag(true)
+  })
+  ipcMain.on(Channels.islandMenu, (e) => {
+    if (!islandWin || islandWin.isDestroyed() || e.sender !== islandWin.webContents) return
+    Menu.buildFromTemplate([
+      { label: 'Position', submenu: positionItems() },
+      { label: 'Hide island', click: () => void applySettings({ islandEnabled: false }) },
+      { type: 'separator' },
+      { label: 'Open Flacon', click: trayDeps.showMain }
+    ]).popup({ window: islandWin })
   })
   setCueLookup((paths) => libraryCall({ op: 'cueRefs', paths }))
   setGainLookup((paths) => libraryCall<LibrarySong[]>({ op: 'trackMetas', paths }).then((r) => r.map((x) => ({ path: x.path, gainDb: x.gainDb, peak: x.peak }))))

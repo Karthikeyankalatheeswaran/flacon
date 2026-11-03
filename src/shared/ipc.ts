@@ -34,6 +34,7 @@ export const AppSettingsSchema = z.object({
   pauseOnSuspend: z.boolean(),
   updateChecks: z.boolean(),
   islandEdge: z.enum(['top', 'bottom']),
+  islandAlign: z.enum(['left', 'center', 'right']),
   onboarded: z.boolean(),
   islandEnabled: z.boolean(),
   /** When the island shows: always, only while something is loaded, or never idle. */
@@ -61,6 +62,10 @@ export interface FlaconBridge extends FetchBridge {
   setTheme(theme: ThemeSetting): Promise<void>
   /** Island window: toggles click-through so the transparent area never eats clicks. */
   setIslandInteractive(interactive: boolean): void
+  /** Island: the pill is being dragged (main follows the cursor and snaps to the nearest spot on drop). */
+  islandDrag(phase: 'start' | 'end'): void
+  /** Island: right-click menu (Position ›, Hide island, Open Flacon), shown natively by main. */
+  islandMenu(): void
   /** Island: bring the main window forward. */
   showMain(): void
   onState(cb: (s: AppState) => void): () => void

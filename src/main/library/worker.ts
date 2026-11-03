@@ -3,7 +3,7 @@
 import { mkdirSync, promises as fs } from 'node:fs'
 import chokidar, { type FSWatcher } from 'chokidar'
 import { isAudioPath } from '@shared/playback'
-import { artUrl, type Album, type HomeData, type LibraryRequest, type LibrarySong, type LibraryTrack, type Playlist, type SongsPage, type SongsQuery, type StatsData } from '@shared/library'
+import { artUrl, placeholderSleeve, type Album, type HomeData, type LibraryRequest, type LibrarySong, type LibraryTrack, type Playlist, type SongsPage, type SongsQuery, type StatsData } from '@shared/library'
 import { SMART, SCOPE_RE, smartById } from '@shared/smart'
 import { ftsQuery } from '@shared/tags'
 import { groupLevel, likeUnder, type FolderListing, type FolderTrack } from '@shared/folders'
@@ -28,9 +28,8 @@ function albumRows(where = '', params: unknown[] = [], limit?: number): Album[] 
     id: String(r.id), title: r.title, artist: r.artist, quality: r.quality, ceilingKhz: Math.round(r.ceiling * 100) / 100, minutes: r.minutes, offline: !!r.offline, tint: r.tint, trackCount: r.trackCount,
     purity: r.purity,
     // Placeholder sleeve (tint) sits under the artwork so a missing file never shows a hole.
-    sleeve: r.art ? `url("${artUrl(r.art)}") center/cover no-repeat, ${r.tint}` : `linear-gradient(135deg, ${r.tint}, #111211)`,
+    sleeve: r.art ? `url("${artUrl(r.art)}") center/cover no-repeat, ${r.tint}` : placeholderSleeve(r.tint),
     artUrl: r.art ? artUrl(r.art) : null,
-    sleeveText: r.art ? undefined : r.title.slice(0, 18).toUpperCase(), sleeveTextColor: '#EDEDE8'
   }))
 }
 
@@ -64,7 +63,7 @@ function toSong(r: SongRow): LibrarySong {
   return {
     id: r.id, path: r.path, title: r.title, artist: r.artist, album: r.album, durationSec: r.durationSec,
     quality: r.upscaled ? 'upscaled' : r.quality, sampleRate: r.sampleRate, bitDepth: r.bitDepth, codec: r.codec, offline: !!r.missing,
-    sleeve: r.art ? `url("${artUrl(r.art)}") center/cover no-repeat, ${r.tint}` : `linear-gradient(135deg, ${r.tint}, #111211)`,
+    sleeve: r.art ? `url("${artUrl(r.art)}") center/cover no-repeat, ${r.tint}` : placeholderSleeve(r.tint),
     artUrl: r.art ? artUrl(r.art) : null, duplicate: !!r.duplicate, lossless: !!r.lossless, purity: r.purity === null ? null : Math.round(r.purity),
     ceilingKhz: r.ceilingHz === null ? null : Math.round(r.ceilingHz / 100) / 10, effBits: r.effBits, upscaled: !!r.upscaled, favorite: !!r.favorite, rating: r.rating,
     playCount: r.playCount, lastPlayed: r.lastPlayed, addedAt: r.addedAt, gainDb: r.gainDb, peak: r.peak, ...(r.pos !== undefined ? { pos: r.pos } : {})
@@ -140,7 +139,7 @@ function playlists(): Playlist[] {
       (select a.art from playlist_tracks x join tracks t on t.path = x.path join albums a on a.id = t.album_id where x.playlist_id = p.id and a.art is not null order by x.pos limit 1) as art
     from playlists p order by p.updated_at desc, p.id desc`).all() as Array<{ id: number; name: string; updatedAt: number; tracks: number; secs: number; art: string | null }>
   return rows.map((r) => ({ id: r.id, name: r.name, tracks: r.tracks, minutes: Math.round(r.secs / 60), updatedAt: r.updatedAt,
-    sleeve: r.art ? `url("${artUrl(r.art)}") center/cover no-repeat, #262725` : 'linear-gradient(135deg, #3a3d3a, #1b1c1b)' }))
+    sleeve: r.art ? `url("${artUrl(r.art)}") center/cover no-repeat, #262725` : placeholderSleeve('#3a3d3a') }))
 }
 
 function home(): HomeData {

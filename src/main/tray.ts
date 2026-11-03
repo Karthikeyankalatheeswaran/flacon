@@ -11,6 +11,8 @@ interface Deps {
   send: (c: PlaybackCommand) => void
   showMain: () => void
   quit: () => void
+  /** Radio items for where the island sits. */
+  islandSpots?: () => Electron.MenuItemConstructorOptions[]
 }
 
 function icon(): Electron.NativeImage {
@@ -28,6 +30,7 @@ function menuFor(s: PlaybackState, d: Deps): Menu {
     { label: 'Next', click: () => d.send({ type: 'next' }), enabled: s.queueIndex + 1 < s.queueLength },
     { label: 'Previous', click: () => d.send({ type: 'prev' }), enabled: s.queueLength > 0 },
     { type: 'separator' },
+    ...(d.islandSpots ? [{ label: 'Island position', submenu: d.islandSpots() }] : []),
     { label: 'Show Flacon', click: d.showMain },
     { label: 'Quit Flacon', click: d.quit }
   ])
