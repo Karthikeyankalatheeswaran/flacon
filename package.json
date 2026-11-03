@@ -16,6 +16,8 @@
     "package": "electron-vite build && node scripts/check-ffmpeg-license.mjs && electron-builder",
     "check:ffmpeg": "node scripts/check-ffmpeg-license.mjs",
     "check:ffmpeg:all": "node scripts/check-ffmpeg-license.mjs --all",
+    "check:signing": "node scripts/check-signing.mjs --env",
+    "package:release": "npm run check:ffmpeg:all && npm run check:signing && electron-vite build && electron-builder --mac --win -c.mac.notarize=true",
     "test:e2e": "electron-vite build && vitest run --config vitest.e2e.config.ts"
   },
   "dependencies": {
