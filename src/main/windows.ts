@@ -19,11 +19,12 @@ function load(win: BrowserWindow, page: 'index' | 'island'): void {
   else void win.loadFile(join(__dirname, `../renderer/${page}.html`))
 }
 
-export function createMainWindow(): BrowserWindow {
+export function createMainWindow(opts: { bounds?: { x: number; y: number; width: number; height: number }; hidden?: boolean } = {}): BrowserWindow {
   const dark = nativeTheme.shouldUseDarkColors
   const win = new BrowserWindow({
-    width: 1280,
-    height: 820,
+    width: opts.bounds?.width ?? 1280,
+    height: opts.bounds?.height ?? 820,
+    ...(opts.bounds ? { x: opts.bounds.x, y: opts.bounds.y } : {}),
     minWidth: 960,
     minHeight: 600,
     show: false,
@@ -36,7 +37,8 @@ export function createMainWindow(): BrowserWindow {
     webPreferences
   })
   lockDown(win)
-  win.once('ready-to-show', () => win.show())
+  // Launched at login: stay in the tray/island until the user asks for the window.
+  win.once('ready-to-show', () => !opts.hidden && win.show())
   // Closing hides: audio keeps playing from the engine window (milestone 2).
   win.on('close', (e) => {
     if (!(globalThis as { __flaconQuitting?: boolean }).__flaconQuitting) {
@@ -48,10 +50,16 @@ export function createMainWindow(): BrowserWindow {
   return win
 }
 
-export function createIslandWindow(): BrowserWindow {
+/** Put the island on the display under the cursor, docked to `edge` (bottom only applies on Windows). */
+export function placeIsland(win: BrowserWindow, edge: 'top' | 'bottom'): void {
+  const d = screen.getDisplayNearestPoint(screen.getCursorScreenPoint())
+  win.setBounds(islandBounds(d, process.platform, edge))
+}
+
+export function createIslandWindow(edge: () => 'top' | 'bottom' = () => 'top'): BrowserWindow {
   const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint())
   const win = new BrowserWindow({
-    ...islandBounds(display, process.platform),
+    ...islandBounds(display, process.platform, edge()),
     frame: false,
     transparent: true,
     resizable: false,
@@ -72,10 +80,7 @@ export function createIslandWindow(): BrowserWindow {
   win.once('ready-to-show', () => win.showInactive())
   load(win, 'island')
 
-  const replace = (): void => {
-    const d = screen.getDisplayNearestPoint(screen.getCursorScreenPoint())
-    win.setBounds(islandBounds(d, process.platform))
-  }
+  const replace = (): void => placeIsland(win, edge())
   screen.on('display-added', replace)
   screen.on('display-removed', replace)
   screen.on('display-metrics-changed', replace)

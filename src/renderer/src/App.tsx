@@ -1,9 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { useStore, guarded } from '@/store'
+import { isInteractiveTarget, tabKeys } from '@/lib/a11y'
 import { Rail } from './components/Rail'
 import { AlbumGrid } from './components/AlbumGrid'
 import { Vessel } from './components/Vessel'
 import { Icon } from './components/icons'
+import { SettingsPage } from './components/SettingsPage'
+import { Onboarding } from './components/Onboarding'
 import { FetchPage } from './components/FetchPage'
 import { EqPanel } from './components/EqPanel'
 import { SongsTable } from './components/SongsTable'
@@ -24,6 +27,23 @@ export function App(): JSX.Element {
   const shellRef = useRef<HTMLDivElement>(null)
   const vesselLeft = (): number => (shellRef.current?.getBoundingClientRect().right ?? 0) - 336
 
+  const searchRef = useRef<HTMLInputElement>(null)
+  const send = useStore((s) => s.send)
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault()
+        useStore.getState().setPage('library')
+        window.setTimeout(() => searchRef.current?.focus(), 0)
+      } else if (e.key === ' ' && !e.metaKey && !e.ctrlKey && !e.altKey && !isInteractiveTarget(e.target)) {
+        e.preventDefault() // Space plays/pauses unless a control has focus and wants the key
+        send({ type: 'toggle' })
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [send])
+
   useEffect(() => {
     shellRef.current?.style.setProperty('--tint', guarded(tintHex))
   }, [tintHex])
@@ -35,14 +55,16 @@ export function App(): JSX.Element {
 
   return (
     <div className="shell" ref={shellRef}>
-      <Rail active={page === 'fetch' ? 'Fetch' : 'Library'} />
-      <main className="main">
-        {page === 'fetch' ? <FetchPage /> : (
+      <a className="skip" href="#content" onClick={(e) => { e.preventDefault(); document.getElementById('content')?.focus() }}>Skip to content</a>
+      <Rail active={page === 'fetch' ? 'Fetch' : page === 'settings' ? 'Settings' : 'Library'} />
+      <main className="main" id="content" tabIndex={-1}>
+        {page === 'fetch' ? <FetchPage /> : page === 'settings' ? <SettingsPage /> : (
         <>
         <div className="titlebar-drag" style={{ height: 'var(--shell-titlebar)', display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
           <label className="search no-drag">
             <Icon name="search" />
             <input
+              ref={searchRef}
               type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search your library"
               aria-label="Search your library" spellCheck={false}
             />
@@ -51,7 +73,7 @@ export function App(): JSX.Element {
         </div>
         <div className="page-head">
           <h1 className="t-display">{tab === 'Songs' ? 'Songs' : 'Library'}</h1>
-          <div role="tablist" className="tabs">
+          <div role="tablist" className="tabs" onKeyDown={tabKeys}>
             {TABS.map((t) => (
               <button key={t} type="button" role="tab" className="tab" aria-selected={t === tab} onClick={() => (t === 'Albums' || t === 'Songs') && setTab(t)}
                 disabled={t === 'Artists' || t === 'Folders'} title={t === 'Artists' || t === 'Folders' ? 'Coming soon' : undefined}>{t}</button>
@@ -113,6 +135,7 @@ export function App(): JSX.Element {
       </main>
       <Vessel over={over} />
       {eqOpen && <EqPanel />}
+      <Onboarding />
     </div>
   )
 }

@@ -26,6 +26,22 @@ export const AppStateSchema = z.object({
 })
 export type AppState = z.infer<typeof AppStateSchema>
 
+export const AppSettingsSchema = z.object({
+  launchAtLogin: z.boolean(),
+  pauseOnSuspend: z.boolean(),
+  islandEdge: z.enum(['top', 'bottom']),
+  onboarded: z.boolean()
+})
+export type AppSettings = z.infer<typeof AppSettingsSchema>
+/** What the settings page needs beyond the editable values. */
+export interface AppSettingsInfo extends AppSettings {
+  /** The settings file was damaged at startup and has been reset (a backup was kept). */
+  recovered: boolean
+  /** Login items are only registered for packaged builds. */
+  canLaunchAtLogin: boolean
+  platform: AppState['platform']
+}
+
 /** The only surface the preload bridge exposes to renderers. */
 export interface FlaconBridge extends FetchBridge {
   getState(): Promise<AppState>
@@ -43,6 +59,10 @@ export interface FlaconBridge extends FetchBridge {
   /** Native folder picker; main persists the folder and scans it. */
   libraryAddFolder(): Promise<void>
   libraryPlayAlbum(albumId: string): Promise<void>
+  libraryFolders(): Promise<string[]>
+  libraryRemoveFolder(path: string): Promise<void>
+  getSettings(): Promise<AppSettingsInfo>
+  setSettings(patch: Partial<AppSettings>): Promise<AppSettingsInfo>
   librarySongs(q: SongsQuery): Promise<SongsPage>
   getLibraryProgress(): Promise<LibraryProgress>
   onLibraryProgress(cb: (p: LibraryProgress) => void): () => void

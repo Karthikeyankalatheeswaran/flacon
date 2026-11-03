@@ -261,9 +261,10 @@ function handle(c: PlaybackCommand | { type: 'resume-context' }): void {
   switch (c.type) {
     case 'load':
       queue = c.tracks
-      wantPlaying = true
-      startTrack(Math.min(c.index, queue.length - 1))
-      void play()
+      wantPlaying = !c.paused
+      startTrack(Math.min(c.index, queue.length - 1), c.startSec ?? 0)
+      if (c.paused) push({ status: 'paused' }) // session restore: ready at the saved spot, silent until the user presses play
+      else void play()
       break
     case 'play': void play(); break
     case 'pause': pause(); break

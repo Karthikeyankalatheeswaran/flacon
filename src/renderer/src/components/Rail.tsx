@@ -46,9 +46,8 @@ export function Rail({ active }: { active: string }): JSX.Element {
               <div style={{ height: 1, width: `${progress.total ? (progress.done / progress.total) * 100 : 0}%`, background: 'var(--ink)' }} />
             </div>
           </div>
-        ) : (
-          <button type="button" className="rail-sub" style={{ height: 'auto' }}>Settings</button>
-        )}
+        ) : null}
+        <button type="button" className="rail-sub" style={{ height: 'auto', marginTop: 8 }} aria-current={active === 'Settings' ? 'page' : undefined} onClick={() => setPage('settings')}>Settings</button>
         {progress.denied.length > 0 && <p style={{ margin: '8px 0 0' }}>Couldn’t read {progress.denied.length} folder{progress.denied.length > 1 ? 's' : ''}. Allow access in System Settings › Privacy.</p>}
       </div>
     </nav>

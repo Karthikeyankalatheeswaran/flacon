@@ -123,7 +123,12 @@ async function handle(req: LibraryRequest): Promise<unknown> {
     }
     case 'folders': return folders()
     case 'addFolder': db.prepare('insert or ignore into folders (path) values (?)').run(req.path); return null
-    case 'removeFolder': db.prepare('delete from folders where path = ?').run(req.path); return null
+    case 'removeFolder':
+      db.prepare('delete from folders where path = ?').run(req.path)
+      indexer.removeUnder(req.path)
+      startWatching()
+      post({ event: 'changed' })
+      return null
     case 'scan': void scanAll(); return null
     case 'albums': return albumRows()
     case 'albumTracks':

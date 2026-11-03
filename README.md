@@ -113,3 +113,27 @@ Missing tags are filled from the source, the licence is written into the file (C
 Not yet / known gaps: providers run in the main process (modules never touch the filesystem, but a separate fetcher utilityProcess is still to do);
 dedupe is by target path + size, not by tags/duration against the library; artwork is folder art, not embedded; Jamendo client ID is stored in plain JSON in userData
 (it's a public identifier, not a secret); only the Internet Archive search was exercised against the live API (read-only), no real download was run.
+
+## M7 — Settings, persistence, onboarding, accessibility
+
+**Settings store** (`src/shared/settings.ts`, `src/main/settingsStore.ts`): one versioned JSON file (`settings.json` in userData) with an explicit migration list,
+per-field fallback (one bad value never resets the rest), atomic debounced writes, and corruption recovery (damaged file moved to `settings.json.corrupt-<time>`,
+defaults used, and the Settings page says so). A file from a newer build is read for the fields we know and backed up before being touched. Migrations keep a `.v<N>.bak` of the old shape.
+This is deliberately a small in-house store, not `electron-store` (ESM-only, doesn't fit this CJS main bundle). EQ (`eq.json`) and fetch settings/queue keep their own files for now.
+
+Persisted: theme, open-at-login, pause-on-sleep, island edge (Windows), volume, onboarded flag, main-window bounds **per display** (restored only if still on a connected screen with a reachable title bar),
+and the session (queue, track, position). The session restores **paused** at the saved position; files on an unmounted drive are skipped. Saved every 15 s and at quit.
+
+**Settings page** (rail → Settings): appearance, open at login (registered only in packaged builds; a login launch stays in the tray/island with the window closed),
+pause on sleep, island edge (Windows), library folders with confirm-before-remove (removing a folder drops its songs from Flacon and never touches files).
+Also fixed: folder path matching used `LIKE root%`, which also matched sibling folders such as `/music2`.
+
+**Onboarding**: one dismissible sheet on first run (Esc skips), shown once.
+
+**Accessibility**: ⌘/Ctrl+K focuses search, Space plays/pauses unless a control wants the key, skip link, arrow/Home/End on tabs, `prefers-reduced-motion` honoured globally (island already did).
+A token audit test (`tokens.test.ts`) checks WCAG AA (4.5:1) for text colours on every surface in both themes; it found and fixed two near-misses (light `--ink-2` 0.60→0.64 alpha, `--ok` darkened slightly: a small deliberate deviation from the handoff values).
+
+**Performance**: the Songs table renders ~28 DOM rows whatever the library size (checked with 100,000 mock songs: `?songs=100000` on the web preview). Real frame timings and a 100k-row SQLite benchmark were **not** measured
+(the preview pane throttles animation frames; the database needs the Electron ABI), so 60 fps at 100k is a design expectation, not a measured result.
+
+Not yet: screen-reader pass with VoiceOver/NVDA, high-contrast mode, per-device audio profiles, settings for naming template/download location, export/import of settings.

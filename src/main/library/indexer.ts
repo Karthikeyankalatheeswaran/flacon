@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
 import { existsSync, promises as fs } from 'node:fs'
-import { dirname, extname, join } from 'node:path'
+import { dirname, extname, join, sep } from 'node:path'
 import { parseFile } from 'music-metadata'
 import { betterQuality, albumKey, cleanString, hueTint, inferQuality, normalizeTags, parseNumberOf, splitMulti } from '@shared/tags'
 import type { Quality } from '@shared/library'
@@ -15,6 +15,14 @@ export interface Indexer {
   scanFolder(root: string, onProgress: (done: number, total: number) => void): Promise<{ denied: string[]; reachable: boolean }>
   indexFile(path: string): Promise<void>
   removeFile(path: string): void
+  /** Drop every track under `root` in one transaction (a library folder was removed). */
+  removeUnder(root: string): void
+}
+
+/** LIKE pattern for "everything inside `root`": the separator is included so /music doesn't also match /music2. */
+function underRootPattern(root: string): string {
+  const esc = (v: string): string => v.replace(/[\\%_]/g, '\\$&')
+  return esc(root.replace(/[\\/]+$/, '')) + esc(sep) + '%'
 }
 
 export function createIndexer(db: Db, artDir: string): Indexer {
@@ -154,7 +162,7 @@ export function createIndexer(db: Db, artDir: string): Indexer {
 
   async function scanFolder(root: string, onProgress: (done: number, total: number) => void): Promise<{ denied: string[]; reachable: boolean }> {
     const w = await walk(root)
-    const like = root.replace(/[\\%_]/g, '\\$&') + '%'
+    const like = underRootPattern(root)
     const known = q.underRoot.all(like) as Array<{ id: number; path: string; albumId: number }>
     if (!w.rootReachable) {
       // Drive offline / folder renamed or removed: keep everything, just flag it unavailable.
@@ -184,5 +192,18 @@ export function createIndexer(db: Db, artDir: string): Indexer {
     return { denied: w.denied, reachable: true }
   }
 
-  return { scanFolder, indexFile: async (p) => { await indexFile(p); flush() }, removeFile }
+  function removeUnder(root: string): void {
+    const like = underRootPattern(root)
+    const rows = q.underRoot.all(like) as Array<{ id: number; albumId: number }>
+    db.transaction(() => {
+      for (const r of rows) {
+        q.ftsDelete.run(r.id)
+        q.delTrack.run(r.id)
+        touched.add(r.albumId)
+      }
+    })()
+    flush()
+  }
+
+  return { scanFolder, removeUnder, indexFile: async (p) => { await indexFile(p); flush() }, removeFile }
 }

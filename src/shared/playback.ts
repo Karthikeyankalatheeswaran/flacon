@@ -13,7 +13,7 @@ export type TrackRef = z.infer<typeof TrackRefSchema>
 
 /** Commands UI → main → engine. Validated in main before forwarding. */
 export const PlaybackCommandSchema = z.discriminatedUnion('type', [
-  z.object({ type: z.literal('load'), tracks: z.array(TrackRefSchema).min(1).max(5000), index: z.number().int().min(0).default(0) }),
+  z.object({ type: z.literal('load'), tracks: z.array(TrackRefSchema).min(1).max(5000), index: z.number().int().min(0).default(0), paused: z.boolean().optional(), startSec: z.number().min(0).max(36 * 3600).optional() }),
   z.object({ type: z.literal('play') }),
   z.object({ type: z.literal('pause') }),
   z.object({ type: z.literal('toggle') }),

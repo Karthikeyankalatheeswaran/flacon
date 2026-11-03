@@ -1,14 +1,14 @@
 import type { FetchJob } from '@shared/fetch'
 import type { FetchSettings } from '@shared/fetchIpc'
-import type { AppState, FlaconBridge, ThemeSetting } from '@shared/ipc'
+import type { AppSettingsInfo, AppState, FlaconBridge, ThemeSetting } from '@shared/ipc'
 import { sampleAlbums, type LibrarySong, type SongsQuery } from '@shared/library'
 import { initialPlayback, type PlaybackState } from '@shared/playback'
 
 // In Electron the preload bridge exists. In a plain browser (npm run dev:web) we mock it so the
 // renderer can be developed and verified without the Electron binary. The mock simulates a
 // playing track so the transport UI is exercisable; it produces no audio.
-// 5 000 synthetic songs so virtualization and sorting can be exercised without a real library.
-const mockSongs: LibrarySong[] = Array.from({ length: 5000 }, (_, i) => {
+// 5 000 synthetic songs (more with ?songs=100000) so virtualization and sorting can be exercised without a real library.
+const mockSongs: LibrarySong[] = Array.from({ length: Math.min(500_000, Number(new URLSearchParams(location.search).get('songs')) || 5000) }, (_, i) => {
   const a = sampleAlbums[i % sampleAlbums.length]!
   return {
     id: i + 1, path: `/mock/${i}.flac`, title: `${['Glass Harbour', 'Undertow', 'Pilot Light', 'Hush', 'Shoreline'][i % 5]} ${Math.floor(i / 5) + 1}`, artist: a.artist, album: a.title,
@@ -86,12 +86,19 @@ function mockBridge(): FlaconBridge {
     getLibraryProgress: async () => ({ phase: 'idle', done: 0, total: 0, denied: [] }),
     onLibraryProgress: () => () => {},
     onLibraryChanged: () => () => {},
+    libraryFolders: async () => [...mockFolders],
+    libraryRemoveFolder: async (p) => void mockFolders.splice(mockFolders.indexOf(p), 1),
+    getSettings: async () => ({ ...mockSettings }),
+    setSettings: async (patch) => ({ ...Object.assign(mockSettings, patch) }),
     ...mockFetch()
   }
 }
 
 export const bridge: FlaconBridge = window.flacon ?? mockBridge()
 
+
+const mockFolders = ['/Users/you/Music/Flacon', '/Volumes/Archive/Lossless']
+const mockSettings: AppSettingsInfo = { launchAtLogin: false, pauseOnSuspend: true, islandEdge: 'top', onboarded: false, recovered: false, canLaunchAtLogin: true, platform: 'darwin' }
 
 // Browser-preview stand-in for the fetcher: canned search results and a job that walks through every state.
 function mockFetch(): Pick<FlaconBridge, 'fetchSearch' | 'fetchEnqueue' | 'fetchControl' | 'fetchGet' | 'onFetch' | 'fetchSettings' | 'fetchSetSettings'> {

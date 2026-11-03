@@ -79,9 +79,15 @@ export function sendToEngine(cmd: PlaybackCommand | { type: 'resume-context' }):
 }
 
 /** Validate untrusted renderer input before it reaches the engine. */
+let lastQueue: string[] = []
+/** Paths of the most recently loaded queue (saved with the session at quit). */
+export const currentQueue = (): string[] => lastQueue
+
 export function dispatch(raw: unknown): void {
   const parsed = PlaybackCommandSchema.safeParse(raw)
-  if (parsed.success) sendToEngine(parsed.data)
+  if (!parsed.success) return
+  if (parsed.data.type === 'load') lastQueue = parsed.data.tracks.map((t) => t.path)
+  sendToEngine(parsed.data)
 }
 
 export function shutdownEngine(): void {

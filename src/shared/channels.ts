@@ -22,6 +22,10 @@ export const Channels = {
   libraryGetProgress: 'flacon:library-get-progress',
   libraryProgress: 'flacon:library-progress',
   libraryChanged: 'flacon:library-changed',
+  libraryFolders: 'flacon:library-folders',
+  libraryRemoveFolder: 'flacon:library-remove-folder',
+  settingsGet: 'flacon:settings-get',
+  settingsSet: 'flacon:settings-set',
   // fetcher
   fetchSearch: 'flacon:fetch-search',
   fetchEnqueue: 'flacon:fetch-enqueue',

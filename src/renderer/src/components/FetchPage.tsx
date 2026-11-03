@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { FetchJob } from '@shared/fetch'
 import type { FetchSettings, SearchHit } from '@shared/fetchIpc'
 import { bridge } from '@/lib/bridge'
+import { tabKeys } from '@/lib/a11y'
 import { useStore } from '@/store'
 
 const PROVIDERS = [
@@ -84,7 +85,7 @@ export function FetchPage(): JSX.Element {
       <div className="titlebar-drag" style={{ height: 'var(--shell-titlebar)' }} />
       <div className="page-head">
         <h1 className="t-display">Fetch</h1>
-        <div role="tablist" className="tabs">
+        <div role="tablist" className="tabs" onKeyDown={tabKeys}>
           {PROVIDERS.map((x) => (
             <button key={x.id} type="button" role="tab" className="tab" aria-selected={x.id === prov} onClick={() => { setProv(x.id); setState({ kind: 'idle' }); setNotice(null) }}>{x.name}</button>
           ))}

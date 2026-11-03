@@ -1,18 +1,22 @@
-import { readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { app, BrowserWindow, dialog, ipcMain, nativeTheme, net, powerMonitor, powerSaveBlocker, protocol } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, nativeTheme, net, powerMonitor, powerSaveBlocker, protocol, screen } from 'electron'
+import { AppSettingsSchema, type AppSettings, type AppSettingsInfo } from '@shared/ipc'
+import { displayKey, isVisibleOn, type WindowBounds } from '@shared/settings'
+import { createSettingsStore, type SettingsStore } from './settingsStore'
 import { AlbumIdSchema, Channels, SearchQuerySchema, SongsQuerySchema, ThemeSchema, type AppState, type ThemeSetting } from '@shared/ipc'
 import type { Album, LibraryProgress, LibraryTrack, SongsPage } from '@shared/library'
 import { defaultEq, sanitizeEq, type EqSettings } from '@shared/eq'
 import { AUDIO_EXTENSIONS, initialPlayback, isAudioPath, type PlaybackState } from '@shared/playback'
-import { createEngineWindow, dispatch, isEngine, resolveFfmpeg, sendToEngine, shutdownEngine } from './engine'
+import { createEngineWindow, currentQueue, dispatch, isEngine, resolveFfmpeg, sendToEngine, shutdownEngine } from './engine'
 import { FetchControlSchema, FetchPickSchema, FetchSearchSchema, FetchSettingsSchema } from '@shared/fetchIpc'
+import { z } from 'zod'
 import { fetchControl, fetchEnqueue, fetchList, fetchSearch, getFetchSettings, setFetchSettings, startFetcher, stopFetcher } from './fetcher/service'
 import { artDir, call as libraryCall, getProgress, startLibrary, stopLibrary } from './library/client'
 import { installCsp } from './security'
 import { createTray, updateTray } from './tray'
-import { createIslandWindow, createMainWindow } from './windows'
+import { createIslandWindow, createMainWindow, placeIsland } from './windows'
 
 // Local artwork is served only through this scheme, from the art cache dir, by hashed filename.
 protocol.registerSchemesAsPrivileged([{ scheme: 'flacon-art', privileges: { standard: true, secure: true, supportFetchAPI: true } }])
@@ -21,7 +25,9 @@ let theme: ThemeSetting = 'system'
 let mainWin: BrowserWindow | null = null
 let playback: PlaybackState = { ...initialPlayback }
 let blockerId: number | null = null
-const pauseOnSuspend = true // becomes a setting in milestone 7
+let settings: SettingsStore
+let islandWin: BrowserWindow | null = null
+let volumeRestored = false
 let wasPlayingBeforeSuspend = false
 
 // EQ settings persist as a tiny JSON file; anything malformed falls back to flat (never blocks startup).
@@ -49,6 +55,64 @@ function persistEq(eq: EqSettings): void {
   }, 400) // debounce slider drags
 }
 
+const launchedHidden = (): boolean => process.argv.includes('--hidden') || app.getLoginItemSettings().wasOpenedAtLogin
+
+/** Bounds saved for the display the window would open on, but only if they are still on a connected screen. */
+function restoredBounds(): WindowBounds | undefined {
+  const d = screen.getPrimaryDisplay()
+  const saved = settings.get().windows[displayKey(d)]
+  if (!saved || !isVisibleOn(saved, screen.getAllDisplays().map((x) => x.workArea))) return undefined
+  return saved
+}
+
+function makeMainWindow(hidden: boolean): BrowserWindow {
+  const saved = restoredBounds()
+  const win = createMainWindow({ bounds: saved, hidden })
+  if (saved?.maximized) win.once('ready-to-show', () => win.maximize())
+  let t: NodeJS.Timeout | undefined
+  const remember = (): void => {
+    clearTimeout(t)
+    t = setTimeout(() => {
+      if (win.isDestroyed() || win.isMinimized() || win.isFullScreen()) return
+      const b = win.getNormalBounds()
+      settings.set({ windows: { ...settings.get().windows, [displayKey(screen.getDisplayMatching(b))]: { ...b, maximized: win.isMaximized() } } })
+    }, 400)
+  }
+  win.on('resize', remember)
+  win.on('move', remember)
+  return win
+}
+
+function applyLoginItem(enabled: boolean): void {
+  // Registering the dev binary (electron.app) as a login item would be wrong: packaged builds only.
+  if (!app.isPackaged) return
+  app.setLoginItemSettings({ openAtLogin: enabled, openAsHidden: true, args: enabled ? ['--hidden'] : [] })
+}
+
+function settingsInfo(): AppSettingsInfo {
+  const s = settings.get()
+  return {
+    launchAtLogin: s.launchAtLogin, pauseOnSuspend: s.pauseOnSuspend, islandEdge: s.islandEdge, onboarded: s.onboarded,
+    recovered: settings.recoveredFrom !== null, canLaunchAtLogin: app.isPackaged, platform: process.platform as AppState['platform']
+  }
+}
+
+/** Queue + position at quit, restored paused so launching never blasts audio. */
+function saveSession(): void {
+  const paths = currentQueue()
+  if (!paths.length || !playback.track) return
+  settings.set({ session: { paths, index: playback.queueIndex, positionSec: Math.floor(playback.positionSec) } })
+}
+
+function restoreSession(): void {
+  const s = settings.get().session
+  if (!s || !s.paths.length) return
+  const paths = s.paths.filter((p) => existsSync(p)) // files on a drive that isn't mounted are simply skipped
+  if (!paths.length) return
+  const lostBefore = s.paths.slice(0, s.index).filter((p) => !existsSync(p)).length
+  dispatch({ type: 'load', tracks: paths.map((path) => ({ path })), index: Math.max(0, Math.min(paths.length - 1, s.index - lostBefore)), paused: true, startSec: s.positionSec })
+}
+
 function snapshot(): AppState {
   return {
     theme,
@@ -68,7 +132,7 @@ function broadcast(): void {
 const trayDeps = {
   send: (c: Parameters<typeof dispatch>[0]) => dispatch(c),
   showMain: () => {
-    if (!mainWin || mainWin.isDestroyed()) mainWin = createMainWindow()
+    if (!mainWin || mainWin.isDestroyed()) mainWin = makeMainWindow(false)
     mainWin.show()
     mainWin.focus()
   },
@@ -78,8 +142,11 @@ const trayDeps = {
 function onEngineState(s: PlaybackState): void {
   playback = s
   persistEq(s.eq)
+  // The engine boots at the default volume before our saved one is applied: don't let that echo overwrite it.
+  if (!volumeRestored) volumeRestored = Math.abs(s.volume - settings.get().volume) < 0.005
+  else if (s.volume !== settings.get().volume) settings.set({ volume: s.volume })
   // Diagnostics for smoke tests / bug reports; no effect unless the env var is set.
-  if (process.env['FLACON_LOG_STATE']) console.log('[state]', JSON.stringify({ st: s.status, i: s.queueIndex, n: s.queueLength, pos: +s.positionSec.toFixed(2), t: s.track?.title, sr: s.track?.sampleRate, bd: s.track?.bitDepth, rate: s.outputRate, toast: s.toast, eq: s.eq.enabled ? s.eq.preset + ' ' + s.eq.preamp : 'off' }))
+  if (process.env['FLACON_LOG_STATE']) console.log('[state]', JSON.stringify({ st: s.status, i: s.queueIndex, n: s.queueLength, pos: +s.positionSec.toFixed(2), t: s.track?.title, sr: s.track?.sampleRate, bd: s.track?.bitDepth, rate: s.outputRate, toast: s.toast, vol: s.volume, eq: s.eq.enabled ? s.eq.preset + ' ' + s.eq.preamp : 'off' }))
   for (const w of uiWindows()) w.webContents.send(Channels.playbackState, s)
   updateTray(s, trayDeps, mainWin)
   // Keep the machine awake (but the display free to sleep) only while audio is playing.
@@ -101,6 +168,7 @@ function registerIpc(): void {
   ipcMain.handle(Channels.setTheme, (_e, raw: unknown) => {
     const next = ThemeSchema.parse(raw) // reject anything unexpected from a renderer
     theme = next
+    settings.set({ theme: next })
     nativeTheme.themeSource = next
     broadcast()
   })
@@ -137,6 +205,21 @@ function registerIpc(): void {
     if (r.canceled) return
     for (const path of r.filePaths) await libraryCall({ op: 'addFolder', path })
     await libraryCall({ op: 'scan' })
+  })
+  ipcMain.handle(Channels.libraryFolders, () => libraryCall<string[]>({ op: 'folders' }))
+  ipcMain.handle(Channels.libraryRemoveFolder, async (_e, raw: unknown) => {
+    const path = z.string().min(1).max(4096).parse(raw)
+    // Only folders that are actually in the library can be removed: the renderer can't name arbitrary paths.
+    if (!(await libraryCall<string[]>({ op: 'folders' })).includes(path)) return
+    await libraryCall({ op: 'removeFolder', path })
+  })
+  ipcMain.handle(Channels.settingsGet, () => settingsInfo())
+  ipcMain.handle(Channels.settingsSet, (_e, raw: unknown) => {
+    const patch = AppSettingsSchema.partial().parse(raw) as Partial<AppSettings>
+    settings.set(patch)
+    if (patch.launchAtLogin !== undefined) applyLoginItem(patch.launchAtLogin)
+    if (patch.islandEdge !== undefined && islandWin && !islandWin.isDestroyed()) placeIsland(islandWin, patch.islandEdge)
+    return settingsInfo()
   })
   ipcMain.handle(Channels.libraryPlayAlbum, async (_e, raw: unknown) => {
     const albumId = Number(AlbumIdSchema.parse(raw))
@@ -202,7 +285,7 @@ function startLibraryService(): void {
 function registerPower(): void {
   powerMonitor.on('suspend', () => {
     wasPlayingBeforeSuspend = playback.status === 'playing'
-    if (pauseOnSuspend && wasPlayingBeforeSuspend) dispatch({ type: 'pause' })
+    if (settings.get().pauseOnSuspend && wasPlayingBeforeSuspend) dispatch({ type: 'pause' })
   })
   const recover = (): void => sendToEngine({ type: 'resume-context' }) // recover the AudioContext
   powerMonitor.on('resume', recover)
@@ -226,6 +309,8 @@ if (!app.requestSingleInstanceLock()) {
     dispatch({ type: 'pause' }) // fade out via the worklet; queue persistence arrives with settings (milestone 7)
   })
   app.on('will-quit', () => {
+    saveSession()
+    settings.flush()
     stopFetcher()
     shutdownEngine()
     stopLibrary()
@@ -236,6 +321,9 @@ if (!app.requestSingleInstanceLock()) {
 
   void app.whenReady().then(() => {
     installCsp()
+    settings = createSettingsStore(join(app.getPath('userData'), 'settings.json'))
+    theme = settings.get().theme
+    nativeTheme.themeSource = theme
     registerIpc()
     registerPower()
     startLibraryService()
@@ -244,8 +332,11 @@ if (!app.requestSingleInstanceLock()) {
     const eq = loadEq()
     savedEq = JSON.stringify(eq) // don't rewrite what we just read
     dispatch({ type: 'eq', eq }) // the engine queues it until its worklet has loaded
-    mainWin = createMainWindow()
-    createIslandWindow()
+    dispatch({ type: 'volume', slider: settings.get().volume })
+    restoreSession()
+    mainWin = makeMainWindow(launchedHidden())
+    islandWin = createIslandWindow(() => settings.get().islandEdge)
+    setInterval(saveSession, 15_000).unref() // survive a crash with a recent position
     createTray(playback, trayDeps)
     if (process.env['FLACON_LOG_STATE']) console.log('[argv]', JSON.stringify(process.argv))
     openPaths(process.argv.slice(app.isPackaged ? 1 : 2))
