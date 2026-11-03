@@ -103,7 +103,7 @@ function Island(): JSX.Element | null {
   const g = geometryFor(st, size)
   const full = st === 'hover' || st === 'expanded'
   const art = st === 'compact' ? 24 : st === 'hover' ? 60 : st === 'expanded' ? 72 : 28
-  const tint = guarded(np ? hueTint(np.title) : undefined)
+  const tint = guarded(np ? hueTint(np.title) : undefined) // placeholder artwork colour when there is no cover
   const shown = drag ?? pos
   const commit = (): void => {
     if (drag !== null) send({ type: 'seek', seconds: drag })
@@ -158,8 +158,12 @@ function Island(): JSX.Element | null {
           <div role="img" aria-label="Flacon, nothing playing" className="isl-pip" />
         ) : (
           <>
-            {np && st !== 'activity' && st !== 'error' && st !== 'expanded' && (
-              <div className="isl-liquid" style={{ width: `${dur ? Math.min(100, (shown / dur) * 100) : 0}%`, background: `color-mix(in srgb, ${tint} 55%, transparent)` }} />
+            {/* Water in the flask: the level rises with playback and the surface keeps rolling. */}
+            {np && st !== 'error' && (
+              <div className="isl-water" aria-hidden data-empty={!dur || shown / dur < 0.02 ? '' : undefined} style={{ ['--p' as string]: dur ? Math.min(1, shown / dur) : 0 }}>
+                <i className="isl-wave back" />
+                <i className="isl-wave" />
+              </div>
             )}
             <div className={`isl-row${st === 'expanded' ? ' tall' : ''}`}>
               {st === 'error' ? (

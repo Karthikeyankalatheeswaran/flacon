@@ -72,7 +72,9 @@ export interface FlaconBridge extends FetchBridge {
   libraryAlbums(): Promise<Album[]>
   librarySearch(query: string): Promise<Album[]>
   /** Native folder picker; main persists the folder and scans it. */
-  libraryAddFolder(): Promise<void>
+  libraryAddFolder(): Promise<AddPathsResult>
+  /** Files or folders dropped onto the window: folders join the library, audio files start playing. */
+  libraryAddDropped(files: File[]): Promise<AddPathsResult>
   libraryPlayAlbum(albumId: string): Promise<void>
   libraryFolders(): Promise<string[]>
   libraryRemoveFolder(path: string): Promise<void>
@@ -142,6 +144,10 @@ export const PlayRequestSchema = z.object({
   index: z.number().int().min(0).max(1_000_000).optional()
 })
 export type PlayRequest = z.infer<typeof PlayRequestSchema>
+
+/** What happened to a batch of picked or dropped paths. */
+export interface AddPathsResult { folders: number; files: number; ignored: number }
+export const AddPathsSchema = z.array(z.string().min(1).max(4096)).min(1).max(500)
 
 export const SearchQuerySchema = z.string().max(200)
 export const FolderDirSchema = z.string().min(1).max(4096).nullable()

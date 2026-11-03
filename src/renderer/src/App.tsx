@@ -19,13 +19,15 @@ import { StatsPage } from './components/StatsPage'
 import { ContextMenu } from './components/ContextMenu'
 import { Sheets } from './components/Sheets'
 import { Toasts } from './components/Toast'
+import { DropZone } from './components/DropZone'
+import { AddMusic } from './components/AddMusic'
 import { bridge } from '@/lib/bridge'
 
 const TABS = ['Albums', 'Songs', 'Artists', 'Folders'] as const
 type Tab = (typeof TABS)[number]
 
 export function App(): JSX.Element {
-  const { albums, libraryLoaded, search, setSearch, addFolder, playAlbum, pour, play } = useStore()
+  const { albums, libraryLoaded, search, setSearch, playAlbum, pour, play } = useStore()
   const tintHex = useStore((s) => s.albums[0]?.tint)
   const theme = useStore((s) => s.app?.theme ?? 'system')
   const setTheme = useStore((s) => s.setTheme)
@@ -128,6 +130,7 @@ export function App(): JSX.Element {
           {up > 0 && <span style={{ color: 'var(--warn)' }}>{up} upscaled</span>}
           {off > 0 && <span>{off} offline</span>}
           <span style={{ marginLeft: 'auto', display: 'flex', gap: 16, alignItems: 'center' }}>
+            <AddMusic />
             <button type="button" className="ghost-btn" disabled={albums.length === 0} onClick={() => void play({ source: { kind: 'scope', scope: 'all', text: search }, mode: 'shuffle' })}><Icon name="shuffle" size={16} /> Shuffle all</button>
             <button type="button" className="ghost-btn" aria-label={`Appearance: ${theme}. Switch to ${theme === 'dark' ? 'light' : 'dark'}.`} title="Toggle light / dark" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
               <Icon name={theme === 'dark' ? 'sunIcon' : 'moonIcon'} size={16} />
@@ -159,9 +162,9 @@ export function App(): JSX.Element {
               </>
             ) : (
               <>
-                <h2 className="t-title">Add a folder to begin</h2>
-                <p className="ink-2">Flacon reads FLAC, ALAC, WAV, AIFF, DSD and more, and measures how much of each record is really there.</p>
-                <button type="button" className="primary" onClick={() => void addFolder()}>Add music folder…</button>
+                <h2 className="t-title">Add your music</h2>
+                <p className="ink-2">Choose a folder, or just drag one onto this window. Flacon reads FLAC, ALAC, WAV, AIFF, DSD and more, and measures how much of each record is really there.</p>
+                <AddMusic primary />
               </>
             )}
           </div>
@@ -180,6 +183,7 @@ export function App(): JSX.Element {
       <ContextMenu />
       <Sheets />
       <Toasts />
+      <DropZone />
     </div>
   )
 }

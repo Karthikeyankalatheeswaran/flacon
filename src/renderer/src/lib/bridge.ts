@@ -88,7 +88,8 @@ function mockBridge(): FlaconBridge {
       return n ? sampleAlbums.filter((a) => fold(`${a.title} ${a.artist}`).includes(n)) : sampleAlbums
     },
     librarySongs: async (q) => mockSongsPage(q),
-    libraryAddFolder: async () => {},
+    libraryAddFolder: async () => ({ folders: 0, files: 0, ignored: 0 }),
+    libraryAddDropped: async (files) => ({ folders: 0, files: files.length, ignored: 0 }),
     libraryPlayAlbum: async () => {},
     libraryFolder: async (dir) => dir === null
       ? { dir, dirs: mockFolders.map((p) => ({ name: p, path: p, tracks: 120 })), tracks: [] }

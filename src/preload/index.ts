@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron'
+import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import { Channels } from '@shared/channels'
 import type { UpdateStatus } from '@shared/update'
 import type { FetchJob } from '@shared/fetch'
@@ -42,6 +42,8 @@ if (location.pathname.endsWith('/engine.html')) {
     libraryFolder: (dir: string | null) => ipcRenderer.invoke(Channels.libraryFolder, dir),
     libraryPlayFolder: (dir: string, index: number) => ipcRenderer.invoke(Channels.libraryPlayFolder, { dir, index }),
     libraryAddFolder: () => ipcRenderer.invoke(Channels.libraryAddFolder),
+    // The sandboxed renderer can't read a dropped file's path; the preload can, and main re-validates every path.
+    libraryAddDropped: (files: File[]) => ipcRenderer.invoke(Channels.libraryAddPaths, files.map((f) => webUtils.getPathForFile(f)).filter(Boolean)),
     libraryPlayAlbum: (id: string) => ipcRenderer.invoke(Channels.libraryPlayAlbum, id),
     libraryFolders: (): Promise<string[]> => ipcRenderer.invoke(Channels.libraryFolders),
     libraryRemoveFolder: (p: string) => ipcRenderer.invoke(Channels.libraryRemoveFolder, p),

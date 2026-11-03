@@ -2,7 +2,7 @@ import type { UpdateStatus } from '@shared/update'
 import type { AppSettings, AppSettingsInfo } from '@shared/ipc'
 import type { FetchJob } from '@shared/fetch'
 import { create } from 'zustand'
-import type { AppState, PlayRequest, QueueSnapshot, ThemeSetting } from '@shared/ipc'
+import type { AddPathsResult, AppState, PlayRequest, QueueSnapshot, ThemeSetting } from '@shared/ipc'
 import type { MenuItem } from './lib/menu'
 import type { AnalysisProgress, Album, LibraryProgress, Playlist } from '@shared/library'
 import { initialPlayback, type PlaybackCommand, type PlaybackState } from '@shared/playback'
@@ -52,7 +52,10 @@ interface UiState {
   pour: (album: Album) => void
   send: (c: PlaybackCommand) => void
   openFiles: () => Promise<void>
+  /** Native folder picker. */
   addFolder: () => Promise<void>
+  /** Files/folders dropped on the window. */
+  addDropped: (files: File[]) => Promise<void>
   playAlbum: (id: string) => Promise<void>
   setSearch: (q: string) => void
 }
@@ -106,13 +109,21 @@ export const useStore = create<UiState>((set) => ({
   },
   send: (c) => bridge.sendPlayback(c),
   openFiles: () => bridge.openFiles(),
-  addFolder: () => bridge.libraryAddFolder(),
+  addFolder: async () => announceAdded(await bridge.libraryAddFolder()),
+  addDropped: async (files) => announceAdded(await bridge.libraryAddDropped(files)),
   playAlbum: (id) => bridge.libraryPlayAlbum(id),
   setSearch: (q) => {
     set({ search: q })
     void refreshAlbums()
   }
 }))
+
+function announceAdded(r: AddPathsResult): void {
+  const say = useStore.getState().showToast
+  if (r.folders) say(`Added ${r.folders} folder${r.folders > 1 ? 's' : ''} — reading your music…`)
+  else if (r.files) say(`Playing ${r.files} song${r.files > 1 ? 's' : ''}`)
+  else if (r.ignored) say('Nothing to add — drop a music folder or audio files.')
+}
 
 // Latest-wins: a slow earlier query must never overwrite a newer result.
 let queryToken = 0

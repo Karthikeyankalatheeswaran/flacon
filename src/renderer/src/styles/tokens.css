@@ -3,9 +3,9 @@
 :root,
 [data-theme='light'] {
   /* Paper & ink, warmed up: ivory ground, near-black ink, one vermilion accent for "alive" things (hearts, now-playing, active). */
-  --bg: #f4f1ea;
-  --sheet: #fffdf8;
-  --well: #e9e4d9;
+  --bg: #e8e4d9; /* softened from near-white: easier on the eyes */
+  --sheet: #f0ece2;
+  --well: #dbd6c9;
   --ink: #17160f;
   --ink-2: rgb(23 22 15 / 0.66);
   --rule: rgb(23 22 15 / 0.14);
@@ -14,8 +14,13 @@
   --ok: #17703b;
   --warn: #8f5600;
   --err: #b8261b;
-  --accent: #bf3a10;
-  --tint: #1d1e22; /* graphite: the player panel's resting colour; albums lend it a faint hue */
+  --accent: #a8310c;
+  --tint: #1d1e22;
+  /* Player panel: a veil of black over the page in light mode, white in dark mode. */
+  --v-bg: rgb(0 0 0 / 0.07);
+  --v-ink: #17160f;
+  --v-strong: #000;
+  --v-on-ink: #ecebe2;
   --tint-ink: #2a2b31; /* tint as text/line on paper */
 
   --font-ui: 'Archivo Variable', Archivo, system-ui, -apple-system, 'Segoe UI Variable', sans-serif;
@@ -53,6 +58,10 @@
   --accent: #ff8a5c;
   --tint-ink: #c4bfb3; /* lifted for graphite */
   --tint: #17181c;
+  --v-bg: rgb(255 255 255 / 0.07);
+  --v-ink: #ecebe5;
+  --v-strong: #fff;
+  --v-on-ink: #111211;
 }
 
 @media (prefers-reduced-motion: reduce) {

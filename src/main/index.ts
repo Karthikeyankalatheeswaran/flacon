@@ -9,7 +9,7 @@ import { displayKey, isVisibleOn, type WindowBounds } from '@shared/settings'
 import { UpdateActionSchema } from '@shared/ipc'
 import { checkForUpdate, downloadUpdate, installUpdate, startUpdater, stopUpdater, updateStatus } from './updater'
 import { createSettingsStore, type SettingsStore } from './settingsStore'
-import { AlbumIdSchema, Channels, FolderDirSchema, PlayFolderSchema, PlayRequestSchema, RendererLibraryRequestSchema, SearchQuerySchema, SongsQuerySchema, ThemeSchema, type AppState, type QueueItem, type QueueSnapshot, type ThemeSetting } from '@shared/ipc'
+import { AddPathsSchema, AlbumIdSchema, Channels, FolderDirSchema, PlayFolderSchema, PlayRequestSchema, RendererLibraryRequestSchema, SearchQuerySchema, SongsQuerySchema, ThemeSchema, type AddPathsResult, type AppState, type QueueItem, type QueueSnapshot, type ThemeSetting } from '@shared/ipc'
 import type { AnalysisProgress, Album, LibraryProgress, LibrarySong, LibraryTrack, SongsPage } from '@shared/library'
 import { defaultEq, sanitizeEq, type EqSettings } from '@shared/eq'
 import { AUDIO_EXTENSIONS, initialPlayback, isAudioPath, type PlaybackState } from '@shared/playback'
@@ -308,6 +308,26 @@ function openPaths(paths: string[]): void {
   if (tracks.length) dispatch({ type: 'load', tracks, index: 0 })
 }
 
+/** Picked or dropped paths: folders join the library (then scan), audio files play, anything else is ignored. */
+async function addPaths(paths: string[]): Promise<AddPathsResult> {
+  const out: AddPathsResult = { folders: 0, files: 0, ignored: 0 }
+  const files: string[] = []
+  for (const p of new Set(paths)) {
+    const st = isAbsolute(p) ? await fsp.stat(p).catch(() => null) : null // renderer-supplied: never trust relative paths
+    if (st?.isDirectory()) {
+      await libraryCall({ op: 'addFolder', path: p })
+      out.folders++
+    } else if (st?.isFile() && isAudioPath(p)) files.push(p)
+    else out.ignored++
+  }
+  if (out.folders) await libraryCall({ op: 'scan' })
+  if (files.length) {
+    openPaths(files)
+    out.files = files.length
+  }
+  return out
+}
+
 function registerIpc(): void {
   ipcMain.handle(Channels.getState, () => snapshot())
   ipcMain.handle(Channels.setTheme, (_e, raw: unknown) => {
@@ -347,13 +367,13 @@ function registerIpc(): void {
   })
   ipcMain.handle(Channels.librarySongs, (_e, raw: unknown) => libraryCall<SongsPage>({ op: 'songs', query: SongsQuerySchema.parse(raw) }))
   ipcMain.handle(Channels.libraryGetProgress, () => getProgress())
-  ipcMain.handle(Channels.libraryAddFolder, async () => {
-    const opts = { properties: ['openDirectory', 'multiSelections'] as Array<'openDirectory' | 'multiSelections'> }
+  ipcMain.handle(Channels.libraryAddFolder, async (): Promise<AddPathsResult> => {
+    const opts = { title: 'Choose your music folder', properties: ['openDirectory', 'multiSelections'] as Array<'openDirectory' | 'multiSelections'> }
     const r = mainWin && !mainWin.isDestroyed() ? await dialog.showOpenDialog(mainWin, opts) : await dialog.showOpenDialog(opts)
-    if (r.canceled) return
-    for (const path of r.filePaths) await libraryCall({ op: 'addFolder', path })
-    await libraryCall({ op: 'scan' })
+    if (r.canceled) return { folders: 0, files: 0, ignored: 0 }
+    return addPaths(r.filePaths)
   })
+  ipcMain.handle(Channels.libraryAddPaths, (_e, raw: unknown) => addPaths(AddPathsSchema.parse(raw)))
   ipcMain.handle(Channels.libraryFolders, () => libraryCall<string[]>({ op: 'folders' }))
   ipcMain.handle(Channels.libraryRemoveFolder, async (_e, raw: unknown) => {
     const path = z.string().min(1).max(4096).parse(raw)

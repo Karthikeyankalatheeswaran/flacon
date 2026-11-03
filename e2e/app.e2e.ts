@@ -140,10 +140,13 @@ describe('app (fresh profile)', () => {
 
   it('browses Folders on disk and plays from a chosen track', async () => {
     await page.getByRole('tab', { name: 'Folders' }).click()
-    await page.getByRole('button', { name: /music/ }).first().click()
-    await page.getByRole('button', { name: /Zed/ }).click()
-    await page.getByRole('button', { name: /Night Album/ }).click()
-    await page.locator('.row-btn', { hasText: /Lantern/ }).click()
+    const rows = (): ReturnType<typeof page.locator> => page.locator('ul.list .row-btn') // not the Add / breadcrumb buttons
+    await rows().first().click()
+    await rows().filter({ hasText: /Zed/ }).click()
+    await rows().filter({ hasText: /Night Album/ }).click()
+    // Breadcrumbs show where we are and let us jump back up.
+    await page.getByRole('navigation', { name: 'Folder path' }).getByRole('button', { name: 'Zed' }).waitFor()
+    await rows().filter({ hasText: /Lantern/ }).click()
     const s = await until(async () => { const x = await pb(page); return /Lantern/.test(x.track?.title ?? '') && x.status === 'playing' && x })
     expect(s.queueIndex).toBe(1)
     await page.getByRole('tab', { name: 'Albums' }).click()

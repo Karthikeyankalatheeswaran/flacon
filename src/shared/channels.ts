@@ -24,6 +24,7 @@ export const Channels = {
   libraryFolder: 'flacon:library-folder',
   libraryPlayFolder: 'flacon:library-play-folder',
   libraryAddFolder: 'flacon:library-add-folder',
+  libraryAddPaths: 'flacon:library-add-paths',
   libraryPlayAlbum: 'flacon:library-play-album',
   libraryGetProgress: 'flacon:library-get-progress',
   libraryProgress: 'flacon:library-progress',

@@ -2,8 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { timecode } from '@shared/library'
 import { purityBadge, purityDetail } from '@shared/purity'
 import { sliderLabel } from '@shared/playback'
-import { hueTint } from '@shared/tags'
-import { guarded, useStore } from '@/store'
+import { useStore } from '@/store'
 import { Icon } from './icons'
 import { PurityMeter, purityColor } from './Purity'
 import { QueuePanel } from './QueuePanel'
@@ -44,16 +43,15 @@ export function Vessel({ over }: { over: boolean }): JSX.Element {
     setDrag(null)
   }
   const nextRepeat = pb.repeat === 'off' ? 'all' : pb.repeat === 'all' ? 'one' : 'off'
-  const bg = guarded(t ? hueTint(meta?.album || t.title) : undefined)
   const facts = meta ? { purity: meta.purity, lossless: meta.lossless, ceilingKhz: meta.ceilingKhz, effBits: meta.effBits, bitDepth: meta.bitDepth, upscaled: meta.upscaled } : null
 
   return (
-    <aside className={`vessel${over ? ' over' : ''}`} aria-label="Now playing and queue" style={{ ['--vessel-bg' as string]: t ? bg : undefined }}>
+    <aside className={`vessel${over ? ' over' : ''}`} aria-label="Now playing and queue">
       <div style={{ height: 'var(--shell-titlebar)', flexShrink: 0 }} />
       {t ? (
         <>
           <div className="vessel-sleeve" role="img" aria-label={meta?.album ? `Artwork for ${meta.album}` : 'No artwork'}
-            style={{ background: meta?.artUrl ? `url("${meta.artUrl}") center/cover no-repeat, ${bg}` : 'linear-gradient(135deg,rgb(237 237 232 / .16),rgb(237 237 232 / .04))' }} />
+            style={{ background: meta?.artUrl ? `url("${meta.artUrl}") center/cover no-repeat` : 'linear-gradient(135deg, color-mix(in srgb, var(--v-ink) 16%, transparent), color-mix(in srgb, var(--v-ink) 4%, transparent))' }} />
           <div className="vessel-title">
             <div style={{ minWidth: 0 }}>
               <div className="t-title ell" dir="auto" title={t.title}>{t.title}</div>

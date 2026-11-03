@@ -48,7 +48,7 @@ export function QueuePanel(): JSX.Element {
                 onDrop={(e) => { e.preventDefault(); if (from !== null && from !== v.index) send({ type: 'move', from, to: v.index }); setFrom(null); setOver(null) }}
                 onDragEnd={() => { setFrom(null); setOver(null) }}>
                 <button type="button" className="qmain" onClick={() => send({ type: 'jump', index: v.index })} aria-label={`Play ${it.title}`} aria-current={now ? 'true' : undefined}>
-                  <i className="qth" style={{ background: it.artUrl ? `url("${it.artUrl}") center/cover` : 'rgb(237 237 232 / .14)' }}>{now && <span className="qnow"><Icon name={status === 'playing' ? 'waveform' : 'pause'} size={16} /></span>}</i>
+                  <i className="qth" style={{ background: it.artUrl ? `url("${it.artUrl}") center/cover` : 'color-mix(in srgb, var(--v-ink) 14%, transparent)' }}>{now && <span className="qnow"><Icon name={status === 'playing' ? 'waveform' : 'pause'} size={16} /></span>}</i>
                   <span className="qtext">
                     <span className="ell" dir="auto" style={{ fontWeight: now ? 650 : 500 }}>{it.title}</span>
                     <span className="ell t-label dim" dir="auto">{it.artist || '—'}</span>
