@@ -25,3 +25,8 @@ needs the same configure flags under MSYS2 into `vendor/ffmpeg/win32-<arch>/`. A
 `electron-updater` is wired (opt-out in Settings → Updates). It is inert in dev and in builds without `app-update.yml`.
 Point it at a feed with `-c.publish.url=https://updates.example.com/flacon` (or a GitHub provider) at package time.
 macOS auto-update requires a signed + notarized build.
+
+## Windows
+Windows x64 is prepared but **has never been run** (all work so far was on macOS). `scripts/build-ffmpeg-win.sh` (MSYS2 MINGW64) builds the same LGPL+soxr ffmpeg into `vendor/ffmpeg/win32-x64/`;
+the `release` CI job builds it, runs the gate, packages the NSIS installer and runs the E2E suite against `dist/win-unpacked/Flacon.exe`. Trigger it with `workflow_dispatch`; expect to fix first-run issues.
+arm64 (Windows and macOS x64) targets are removed from `electron-builder.yml` until their ffmpeg binaries exist. Unsigned NSIS installers trigger SmartScreen warnings.

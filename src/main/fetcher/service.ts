@@ -1,5 +1,5 @@
 import { promises as fs, readFileSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { basename, join } from 'node:path'
 import { app, net } from 'electron'
 import chokidar, { type FSWatcher } from 'chokidar'
 import yauzl from 'yauzl'
@@ -129,7 +129,7 @@ function applyWatch(): void {
   watcher.on('add', (p) => {
     if (!/\.zip$/i.test(p)) return
     void fs.stat(p).then(async (st) => {
-      if (st.isFile() && (await zipHasAudio(p))) manager?.enqueueLocal(p, p.split('/').pop()!.replace(/\.zip$/i, ''))
+      if (st.isFile() && (await zipHasAudio(p))) manager?.enqueueLocal(p, basename(p).replace(/\.zip$/i, ''))
     }).catch(() => {})
   })
 }

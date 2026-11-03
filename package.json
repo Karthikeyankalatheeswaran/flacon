@@ -11,7 +11,7 @@
     "build": "electron-vite build",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "test": "vitest run",
-    "rebuild:native": "cd node_modules/better-sqlite3 && prebuild-install -r electron -t $(node -p \"require('../electron/package.json').version\") --arch $(node -p \"process.arch\")",
+    "rebuild:native": "node scripts/rebuild-native.mjs",
     "package:dir": "electron-vite build && electron-builder --dir --arm64 -c.mac.identity=null && codesign --force --deep -s - dist/mac-arm64/Flacon.app",
     "package": "electron-vite build && node scripts/check-ffmpeg-license.mjs && electron-builder",
     "check:ffmpeg": "node scripts/check-ffmpeg-license.mjs",

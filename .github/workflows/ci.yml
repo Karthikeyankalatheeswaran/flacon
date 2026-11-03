@@ -23,9 +23,10 @@ jobs:
         run: npm run test:e2e
 
   release:
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
     needs: test
     strategy:
+      fail-fast: false
       matrix:
         os: [macos-14, windows-latest]
     runs-on: ${{ matrix.os }}
@@ -33,10 +34,21 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: npm }
+      - uses: msys2/setup-msys2@v2
+        if: runner.os == 'Windows'
+        with:
+          msystem: MINGW64
+          update: true
+          path-type: inherit
+          install: base-devel mingw-w64-x86_64-toolchain mingw-w64-x86_64-libsoxr mingw-w64-x86_64-pkgconf curl xz
       - run: npm ci
+      - run: npm run rebuild:native
       - if: runner.os == 'macOS'
         run: brew install libsoxr && scripts/build-ffmpeg.sh
-      # Release gate: fails unless the bundled ffmpeg is LGPL with soxr. Windows has no build script yet (docs/packaging.md), so it fails there by design.
+      - if: runner.os == 'Windows'
+        shell: msys2 {0}
+        run: scripts/build-ffmpeg-win.sh
+      # Release gate: fails unless the bundled ffmpeg is LGPL with soxr.
       - run: npm run check:ffmpeg
       - run: npm run package
         env:
@@ -46,3 +58,14 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      - name: E2E against the packaged app (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: E2E_APP="$PWD/dist/win-unpacked/Flacon.exe" npx vitest run --config vitest.e2e.config.ts
+      - uses: actions/upload-artifact@v4
+        with:
+          name: flacon-${{ runner.os }}
+          path: |
+            dist/*.dmg
+            dist/*.zip
+            dist/*.exe
