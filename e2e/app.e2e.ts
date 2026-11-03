@@ -97,6 +97,25 @@ describe('app (fresh profile)', () => {
     expect(await page.getByRole('columnheader', { name: /Time/ }).getAttribute('aria-sort')).toBe('descending')
   })
 
+  it('browses Artists: index then the artist’s albums', async () => {
+    await page.getByRole('tab', { name: 'Artists' }).click()
+    await page.getByRole('button', { name: /^Zed/ }).click()
+    await page.getByRole('heading', { name: 'Zed' }).waitFor()
+    expect(await page.getByText('Night Album').count()).toBeGreaterThan(0)
+    await page.getByRole('button', { name: /All artists/ }).click()
+  })
+
+  it('browses Folders on disk and plays from a chosen track', async () => {
+    await page.getByRole('tab', { name: 'Folders' }).click()
+    await page.getByRole('button', { name: /music/ }).first().click()
+    await page.getByRole('button', { name: /Zed/ }).click()
+    await page.getByRole('button', { name: /Night Album/ }).click()
+    await page.getByRole('button', { name: /Lantern/ }).click()
+    const s = await until(async () => { const x = await pb(page); return /Lantern/.test(x.track?.title ?? '') && x.status === 'playing' && x })
+    expect(s.queueIndex).toBe(1)
+    await page.getByRole('tab', { name: 'Albums' }).click()
+  })
+
   it('applies an EQ preset through the engine and persists it', async () => {
     await page.getByRole('button', { name: /^EQ/ }).click()
     await page.getByLabel('Preset').selectOption('Vocal')

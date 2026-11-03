@@ -5,6 +5,7 @@ import chokidar, { type FSWatcher } from 'chokidar'
 import { isAudioPath } from '@shared/playback'
 import { artUrl, type Album, type LibraryRequest, type LibrarySong, type LibraryTrack, type SongsPage, type SongsQuery } from '@shared/library'
 import { ftsQuery } from '@shared/tags'
+import { groupLevel, likeUnder, type FolderListing, type FolderTrack } from '@shared/folders'
 import { openDb, type Db } from './db'
 import { createIndexer, type Indexer } from './indexer'
 
@@ -58,6 +59,17 @@ function songs(q: SongsQuery): SongsPage {
       sleeve: art ? `url("${artUrl(art)}") center/cover no-repeat, ${tint}` : `linear-gradient(135deg, ${tint}, #111211)`
     }))
   }
+}
+
+function folderListing(dir: string | null): FolderListing {
+  if (dir === null) {
+    // Top level: each library root with its track count.
+    const dirs = folders().map((p) => ({ name: p, path: p, tracks: (db.prepare("select count(*) n from tracks where path like ? escape '\\' and missing = 0").get(likeUnder(p)) as { n: number }).n }))
+    return { dir: null, dirs, tracks: [] }
+  }
+  // Only browse inside registered library folders.
+  const rows = db.prepare("select id, path, title, artist, duration as durationSec from tracks where path like ? escape '\\' and missing = 0").all(likeUnder(dir)) as FolderTrack[]
+  return { dir, ...groupLevel(dir, rows) }
 }
 
 function folders(): string[] {
@@ -134,6 +146,7 @@ async function handle(req: LibraryRequest): Promise<unknown> {
     case 'albumTracks':
       return db.prepare('select id, path, title, artist, album, disc, track, duration as durationSec from tracks where album_id = ? and missing = 0 order by disc, track, path').all(req.albumId) as LibraryTrack[]
     case 'songs': return songs(req.query)
+    case 'folder': return folderListing(req.dir)
     case 'search': {
       const m = ftsQuery(req.query)
       if (!m) return []

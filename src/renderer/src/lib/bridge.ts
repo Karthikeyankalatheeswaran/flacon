@@ -84,6 +84,10 @@ function mockBridge(): FlaconBridge {
     librarySongs: async (q) => mockSongsPage(q),
     libraryAddFolder: async () => {},
     libraryPlayAlbum: async () => {},
+    libraryFolder: async (dir) => dir === null
+      ? { dir, dirs: mockFolders.map((p) => ({ name: p, path: p, tracks: 120 })), tracks: [] }
+      : { dir, dirs: dir.split('/').length < 6 ? [{ name: 'Night Album', path: `${dir}/Night Album`, tracks: 2 }] : [], tracks: dir.endsWith('Night Album') ? [{ id: 1, path: `${dir}/01 Moth.flac`, title: 'Moth', artist: 'Zed', durationSec: 212 }, { id: 2, path: `${dir}/02 Lantern.flac`, title: 'Lantern', artist: 'Zed', durationSec: 187 }] : [] },
+    libraryPlayFolder: async () => {},
     getLibraryProgress: async () => ({ phase: 'idle', done: 0, total: 0, denied: [] }),
     onLibraryProgress: () => () => {},
     onLibraryChanged: () => () => {},

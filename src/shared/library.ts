@@ -120,6 +120,7 @@ export type LibraryRequest =
   | { op: 'albumTracks'; albumId: number }
   | { op: 'search'; query: string }
   | { op: 'songs'; query: SongsQuery }
+  | { op: 'folder'; dir: string | null }
 
 /** Convert a stored art filename into a URL served by the flacon-art:// protocol. */
 export const artUrl = (name: string): string => `flacon-art://art/${name}`

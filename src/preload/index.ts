@@ -37,6 +37,8 @@ if (location.pathname.endsWith('/engine.html')) {
     libraryAlbums: (): Promise<Album[]> => ipcRenderer.invoke(Channels.libraryAlbums),
     librarySearch: (q: string): Promise<Album[]> => ipcRenderer.invoke(Channels.librarySearch, q),
     librarySongs: (q: SongsQuery): Promise<SongsPage> => ipcRenderer.invoke(Channels.librarySongs, q),
+    libraryFolder: (dir: string | null) => ipcRenderer.invoke(Channels.libraryFolder, dir),
+    libraryPlayFolder: (dir: string, index: number) => ipcRenderer.invoke(Channels.libraryPlayFolder, { dir, index }),
     libraryAddFolder: () => ipcRenderer.invoke(Channels.libraryAddFolder),
     libraryPlayAlbum: (id: string) => ipcRenderer.invoke(Channels.libraryPlayAlbum, id),
     libraryFolders: (): Promise<string[]> => ipcRenderer.invoke(Channels.libraryFolders),

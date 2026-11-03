@@ -2,6 +2,7 @@ import { z } from 'zod'
 import type { FetchBridge } from './fetchIpc'
 import type { UpdateStatus } from './update'
 import { SONG_SORTS, type Album, type LibraryProgress, type SongsPage, type SongsQuery } from './library'
+import type { FolderListing } from './folders'
 import type { PlaybackCommand, PlaybackState } from './playback'
 
 // Every IPC payload crosses a trust boundary: main validates with these schemas before acting.
@@ -69,12 +70,17 @@ export interface FlaconBridge extends FetchBridge {
   getSettings(): Promise<AppSettingsInfo>
   setSettings(patch: Partial<AppSettings>): Promise<AppSettingsInfo>
   librarySongs(q: SongsQuery): Promise<SongsPage>
+  libraryFolder(dir: string | null): Promise<FolderListing>
+  /** Queue the tracks directly in `dir` and start at `index`. */
+  libraryPlayFolder(dir: string, index: number): Promise<void>
   getLibraryProgress(): Promise<LibraryProgress>
   onLibraryProgress(cb: (p: LibraryProgress) => void): () => void
   onLibraryChanged(cb: () => void): () => void
 }
 
 export const SearchQuerySchema = z.string().max(200)
+export const FolderDirSchema = z.string().min(1).max(4096).nullable()
+export const PlayFolderSchema = z.object({ dir: z.string().min(1).max(4096), index: z.number().int().min(0).max(1_000_000) })
 export const AlbumIdSchema = z.string().regex(/^\d{1,12}$/)
 
 /** Engine window's own minimal surface (separate preload). */

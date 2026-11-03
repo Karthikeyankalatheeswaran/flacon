@@ -10,6 +10,8 @@ import { Onboarding } from './components/Onboarding'
 import { FetchPage } from './components/FetchPage'
 import { EqPanel } from './components/EqPanel'
 import { SongsTable } from './components/SongsTable'
+import { ArtistsView } from './components/ArtistsView'
+import { FoldersView } from './components/FoldersView'
 
 const TABS = ['Albums', 'Songs', 'Artists', 'Folders'] as const
 type Tab = (typeof TABS)[number]
@@ -75,13 +77,16 @@ export function App(): JSX.Element {
           <h1 className="t-display">{tab === 'Songs' ? 'Songs' : 'Library'}</h1>
           <div role="tablist" className="tabs" onKeyDown={tabKeys}>
             {TABS.map((t) => (
-              <button key={t} type="button" role="tab" className="tab" aria-selected={t === tab} onClick={() => (t === 'Albums' || t === 'Songs') && setTab(t)}
-                disabled={t === 'Artists' || t === 'Folders'} title={t === 'Artists' || t === 'Folders' ? 'Coming soon' : undefined}>{t}</button>
+              <button key={t} type="button" role="tab" className="tab" aria-selected={t === tab} onClick={() => setTab(t)}>{t}</button>
             ))}
           </div>
         </div>
         {tab === 'Songs' ? (
           <SongsTable text={search} />
+        ) : tab === 'Folders' ? (
+          <FoldersView />
+        ) : tab === 'Artists' ? (
+          <ArtistsView albums={albums} vesselLeft={vesselLeft} onDragState={setOver} onPour={pour} onPlay={(a) => void playAlbum(a.id)} />
         ) : (
           <>
         <div className="meta t-label ink-2">

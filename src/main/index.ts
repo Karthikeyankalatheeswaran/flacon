@@ -7,7 +7,7 @@ import { displayKey, isVisibleOn, type WindowBounds } from '@shared/settings'
 import { UpdateActionSchema } from '@shared/ipc'
 import { checkForUpdate, downloadUpdate, installUpdate, startUpdater, stopUpdater, updateStatus } from './updater'
 import { createSettingsStore, type SettingsStore } from './settingsStore'
-import { AlbumIdSchema, Channels, SearchQuerySchema, SongsQuerySchema, ThemeSchema, type AppState, type ThemeSetting } from '@shared/ipc'
+import { AlbumIdSchema, Channels, FolderDirSchema, PlayFolderSchema, SearchQuerySchema, SongsQuerySchema, ThemeSchema, type AppState, type ThemeSetting } from '@shared/ipc'
 import type { Album, LibraryProgress, LibraryTrack, SongsPage } from '@shared/library'
 import { defaultEq, sanitizeEq, type EqSettings } from '@shared/eq'
 import { AUDIO_EXTENSIONS, initialPlayback, isAudioPath, type PlaybackState } from '@shared/playback'
@@ -15,6 +15,7 @@ import { createEngineWindow, currentQueue, dispatch, isEngine, resolveFfmpeg, se
 import { FetchControlSchema, FetchPickSchema, FetchSearchSchema, FetchSettingsSchema } from '@shared/fetchIpc'
 import { z } from 'zod'
 import { fetchControl, fetchEnqueue, fetchList, fetchSearch, getFetchSettings, setFetchSettings, startFetcher, stopFetcher } from './fetcher/service'
+import type { FolderListing } from '@shared/folders'
 import { artDir, call as libraryCall, getProgress, startLibrary, stopLibrary } from './library/client'
 import { installCsp } from './security'
 import { createTray, updateTray } from './tray'
@@ -230,6 +231,12 @@ function registerIpc(): void {
     if (patch.launchAtLogin !== undefined) applyLoginItem(patch.launchAtLogin)
     if (patch.islandEdge !== undefined && islandWin && !islandWin.isDestroyed()) placeIsland(islandWin, patch.islandEdge)
     return settingsInfo()
+  })
+  ipcMain.handle(Channels.libraryFolder, (_e, raw: unknown) => libraryCall<FolderListing>({ op: 'folder', dir: FolderDirSchema.parse(raw) }))
+  ipcMain.handle(Channels.libraryPlayFolder, async (_e, raw: unknown) => {
+    const { dir, index } = PlayFolderSchema.parse(raw)
+    const listing = await libraryCall<FolderListing>({ op: 'folder', dir })
+    if (listing.tracks.length) dispatch({ type: 'load', tracks: listing.tracks.map((t) => ({ path: t.path })), index: Math.min(index, listing.tracks.length - 1) })
   })
   ipcMain.handle(Channels.libraryPlayAlbum, async (_e, raw: unknown) => {
     const albumId = Number(AlbumIdSchema.parse(raw))
