@@ -81,9 +81,20 @@ function restoredBounds(): WindowBounds | undefined {
   return saved
 }
 
+/** Unpackaged runs have no bundled icon: give the Dock the app icon so dev builds don't show Electron's. */
+function applyDockIcon(): void {
+  if (app.isPackaged || process.platform !== 'darwin') return
+  const img = nativeImage.createFromPath(join(app.getAppPath(), 'build', 'icon.png'))
+  if (!img.isEmpty()) app.dock?.setIcon(img)
+}
+
 function makeMainWindow(hidden: boolean): BrowserWindow {
   const saved = restoredBounds()
   const win = createMainWindow({ bounds: saved, hidden })
+  // macOS can fall back to the default icon when a window is minimised or comes back: set it again each time.
+  win.on('minimize', applyDockIcon)
+  win.on('restore', applyDockIcon)
+  win.on('show', applyDockIcon)
   if (saved?.maximized) win.once('ready-to-show', () => win.maximize())
   let t: NodeJS.Timeout | undefined
   const remember = (): void => {
@@ -550,11 +561,8 @@ if (!app.requestSingleInstanceLock()) {
   app.on('activate', () => trayDeps.showMain())
 
   void app.whenReady().then(() => {
-    // Unpackaged runs have no bundled icon: give the Dock the app icon so dev builds don't show Electron's.
-    if (!app.isPackaged && process.platform === 'darwin') {
-      const img = nativeImage.createFromPath(join(app.getAppPath(), 'build', 'icon.png'))
-      if (!img.isEmpty()) app.dock?.setIcon(img)
-    }
+    applyDockIcon()
+    app.on('browser-window-focus', applyDockIcon)
     installCsp()
     settings = createSettingsStore(join(app.getPath('userData'), 'settings.json'))
     theme = settings.get().theme
