@@ -3,7 +3,7 @@
 import { mkdirSync, promises as fs } from 'node:fs'
 import chokidar, { type FSWatcher } from 'chokidar'
 import { isAudioPath } from '@shared/playback'
-import { artUrl, type Album, type LibraryRequest, type LibraryTrack } from '@shared/library'
+import { artUrl, type Album, type LibraryRequest, type LibrarySong, type LibraryTrack, type SongsPage, type SongsQuery } from '@shared/library'
 import { ftsQuery } from '@shared/tags'
 import { openDb, type Db } from './db'
 import { createIndexer, type Indexer } from './indexer'
@@ -25,6 +25,39 @@ function albumRows(where = '', ...params: unknown[]): Album[] {
     sleeve: r.art ? `url("${artUrl(r.art)}") center/cover no-repeat, ${r.tint}` : `linear-gradient(135deg, ${r.tint}, #111211)`,
     sleeveText: r.art ? undefined : r.title.slice(0, 18).toUpperCase(), sleeveTextColor: '#EDEDE8'
   }))
+}
+
+// Sort columns are whitelisted (never interpolate user input into SQL). `lower()` gives a stable
+// case-insensitive order; ties break on album/disc/track so equal titles keep a sensible order.
+const SORT_SQL: Record<SongsQuery['sort'], string> = {
+  title: 't.title collate nocase',
+  artist: 't.artist collate nocase',
+  album: 't.album collate nocase',
+  duration: 't.duration',
+  quality: "case t.quality when 'hires' then 2 when 'cd' then 1 else 0 end",
+  added: 't.added_at'
+}
+
+function songs(q: SongsQuery): SongsPage {
+  const m = ftsQuery(q.text)
+  const where = m ? 'where t.id in (select rowid from tracks_fts where tracks_fts match ?)' : ''
+  const args = m ? [m] : []
+  const total = (db.prepare(`select count(*) n from tracks t ${where}`).get(...args) as { n: number }).n
+  const dir = q.dir === 'desc' ? 'desc' : 'asc'
+  const rows = db.prepare(`select t.id, t.path, t.title, t.artist, t.album, t.duration as durationSec, t.quality, t.sample_rate as sampleRate, t.bit_depth as bitDepth, t.codec, t.missing,
+      a.art, a.tint,
+      exists (select 1 from tracks d where d.id != t.id and d.title = t.title and d.artist = t.artist and abs(d.duration - t.duration) < 1) as duplicate
+    from tracks t join albums a on a.id = t.album_id ${where}
+    order by ${SORT_SQL[q.sort]} ${dir}, t.album collate nocase, t.disc, t.track, t.id limit ? offset ?`).all(...args, q.limit, q.offset) as Array<
+    Omit<LibrarySong, 'sleeve' | 'offline' | 'duplicate'> & { missing: number; art: string | null; tint: string; duplicate: number }
+  >
+  return {
+    total,
+    rows: rows.map(({ art, tint, missing, duplicate, ...r }) => ({
+      ...r, offline: !!missing, duplicate: !!duplicate,
+      sleeve: art ? `url("${artUrl(art)}") center/cover no-repeat, ${tint}` : `linear-gradient(135deg, ${tint}, #111211)`
+    }))
+  }
 }
 
 function folders(): string[] {
@@ -95,6 +128,7 @@ async function handle(req: LibraryRequest): Promise<unknown> {
     case 'albums': return albumRows()
     case 'albumTracks':
       return db.prepare('select id, path, title, artist, album, disc, track, duration as durationSec from tracks where album_id = ? and missing = 0 order by disc, track, path').all(req.albumId) as LibraryTrack[]
+    case 'songs': return songs(req.query)
     case 'search': {
       const m = ftsQuery(req.query)
       if (!m) return []

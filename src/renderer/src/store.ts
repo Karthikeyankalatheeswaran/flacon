@@ -9,6 +9,8 @@ interface UiState {
   app: AppState | null
   albums: Album[]
   libraryLoaded: boolean
+  /** Bumped whenever the library changes on disk; tables refetch when it moves. */
+  libraryVersion: number
   search: string
   progress: LibraryProgress
   /** Queue held in the vessel (design: "pour an album"). Whole albums so search filters can't drop rows. */
@@ -28,6 +30,7 @@ export const useStore = create<UiState>((set) => ({
   app: null,
   albums: [],
   libraryLoaded: false,
+  libraryVersion: 0,
   search: '',
   progress: { phase: 'idle', done: 0, total: 0, denied: [] },
   queue: [],
@@ -74,7 +77,10 @@ export function initApp(): () => void {
   // Scans emit many "changed" events; refresh at most twice a second so the grid fills in smoothly.
   const offC = bridge.onLibraryChanged(() => {
     window.clearTimeout(t)
-    t = window.setTimeout(() => void refreshAlbums(), 500)
+    t = window.setTimeout(() => {
+      void refreshAlbums()
+      useStore.setState((s) => ({ libraryVersion: s.libraryVersion + 1 }))
+    }, 500)
   })
   return () => {
     offA()

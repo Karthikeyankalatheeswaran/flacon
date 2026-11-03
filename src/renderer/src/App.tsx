@@ -4,6 +4,10 @@ import { Rail } from './components/Rail'
 import { AlbumGrid } from './components/AlbumGrid'
 import { Vessel } from './components/Vessel'
 import { Icon } from './components/icons'
+import { SongsTable } from './components/SongsTable'
+
+const TABS = ['Albums', 'Songs', 'Artists', 'Folders'] as const
+type Tab = (typeof TABS)[number]
 
 export function App(): JSX.Element {
   const { albums, libraryLoaded, search, setSearch, addFolder, playAlbum, pour } = useStore()
@@ -12,6 +16,7 @@ export function App(): JSX.Element {
   const setTheme = useStore((s) => s.setTheme)
   const scanning = useStore((s) => s.progress.phase === 'scanning')
   const [over, setOver] = useState(false)
+  const [tab, setTab] = useState<Tab>('Albums')
   const shellRef = useRef<HTMLDivElement>(null)
   const vesselLeft = (): number => (shellRef.current?.getBoundingClientRect().right ?? 0) - 336
 
@@ -39,13 +44,18 @@ export function App(): JSX.Element {
           </label>
         </div>
         <div className="page-head">
-          <h1 className="t-display">Library</h1>
+          <h1 className="t-display">{tab === 'Songs' ? 'Songs' : 'Library'}</h1>
           <div role="tablist" className="tabs">
-            {['Albums', 'Songs', 'Artists', 'Folders'].map((t, i) => (
-              <button key={t} type="button" role="tab" className="tab" aria-selected={i === 0}>{t}</button>
+            {TABS.map((t) => (
+              <button key={t} type="button" role="tab" className="tab" aria-selected={t === tab} onClick={() => (t === 'Albums' || t === 'Songs') && setTab(t)}
+                disabled={t === 'Artists' || t === 'Folders'} title={t === 'Artists' || t === 'Folders' ? 'Coming soon' : undefined}>{t}</button>
             ))}
           </div>
         </div>
+        {tab === 'Songs' ? (
+          <SongsTable text={search} />
+        ) : (
+          <>
         <div className="meta t-label ink-2">
           <span>{albums.length.toLocaleString()} albums</span>
           {albums.length > 0 && <span>{Math.round((hi / albums.length) * 100)}% verified hi-res</span>}
@@ -89,6 +99,8 @@ export function App(): JSX.Element {
         ) : (
           <AlbumGrid albums={albums} vesselLeft={vesselLeft} onDragState={setOver}
             onPour={pour} onPlay={(a) => void playAlbum(a.id)} />
+        )}
+          </>
         )}
       </main>
       <Vessel over={over} />

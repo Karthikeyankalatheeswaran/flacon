@@ -70,3 +70,26 @@
 .empty p { margin: 0; }
 .primary { margin-top: 16px; height: 36px; padding: 0 16px; border: 0; border-radius: var(--radius-control); background: var(--ink); color: var(--bg); font-weight: 600; font-size: 13px; cursor: pointer; }
 .rail-progress { display: flex; flex-direction: column; gap: 8px; }
+
+/* Songs table: 48px rows, hairline separators, sticky header on the title rule. */
+.songs { flex: 1; min-height: 0; display: flex; flex-direction: column; outline: none; }
+.songs:focus-visible { outline: 2px solid var(--ink); outline-offset: -2px; }
+.srow { display: grid; gap: 16px; align-items: center; height: 48px; padding: 0 8px; border-bottom: 1px solid var(--rule-2); font-size: 13px; }
+.sbody .srow { position: absolute; top: 0; left: 0; right: 0; }
+.shead { height: 40px; border-bottom: 1px solid var(--rule); color: var(--ink-2); flex-shrink: 0; }
+.hcell { position: relative; height: 40px; display: flex; align-items: center; }
+.hbtn { border: 0; background: none; padding: 0; font: inherit; color: inherit; cursor: pointer; }
+.grip { position: absolute; right: -12px; top: 0; bottom: 0; width: 16px; cursor: col-resize; touch-action: none; }
+.grip::after { content: ''; position: absolute; left: 8px; top: 12px; bottom: 12px; width: 1px; background: var(--rule); }
+.grip:hover::after { background: var(--ink); }
+.sbody { flex: 1; min-height: 0; overflow-y: auto; }
+.srow.sel { background: color-mix(in srgb, var(--tint-ink) 12%, transparent); }
+.srow.foc { box-shadow: inset 2px 0 0 var(--ink); }
+.srow:not(.shead):hover { background: var(--hover); }
+.srow.sel:hover { background: color-mix(in srgb, var(--tint-ink) 16%, transparent); }
+.cell { min-width: 0; }
+.ell { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.thumb { width: 32px; height: 32px; border-radius: var(--radius-sleeve); flex-shrink: 0; }
+.skel { height: 12px; background: var(--well); }
+.tab:disabled { opacity: .45; cursor: default; }
+.songs, .sbody { min-width: 0; overflow-x: hidden; }

@@ -1,7 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { Channels } from '@shared/channels'
 import type { AppState, EngineBridge, FlaconBridge, ThemeSetting } from '@shared/ipc'
-import type { Album, LibraryProgress } from '@shared/library'
+import type { Album, LibraryProgress, SongsPage, SongsQuery } from '@shared/library'
 import type { PlaybackCommand, PlaybackState } from '@shared/playback'
 
 // One preload for every window (sandboxed preloads cannot require sibling chunks). Each page only
@@ -33,6 +33,7 @@ if (location.pathname.endsWith('/engine.html')) {
     onPlayback: (cb) => subscribe<PlaybackState>(Channels.playbackState, cb),
     libraryAlbums: (): Promise<Album[]> => ipcRenderer.invoke(Channels.libraryAlbums),
     librarySearch: (q: string): Promise<Album[]> => ipcRenderer.invoke(Channels.librarySearch, q),
+    librarySongs: (q: SongsQuery): Promise<SongsPage> => ipcRenderer.invoke(Channels.librarySongs, q),
     libraryAddFolder: () => ipcRenderer.invoke(Channels.libraryAddFolder),
     libraryPlayAlbum: (id: string) => ipcRenderer.invoke(Channels.libraryPlayAlbum, id),
     getLibraryProgress: (): Promise<LibraryProgress> => ipcRenderer.invoke(Channels.libraryGetProgress),

@@ -25,7 +25,7 @@ export interface Album {
 export const CD_LIMIT_KHZ = 22.05
 
 /** Fill-line width: share of the spectrum actually present (design C1). */
-export function fillPercent(a: Pick<Album, 'quality' | 'ceilingKhz'>): number {
+export function fillPercent(a: Pick<Album, 'quality'>): number {
   if (a.quality === 'hires') return 99
   if (a.quality === 'upscaled') return 41
   if (a.quality === 'lossy') return 33
@@ -119,6 +119,57 @@ export type LibraryRequest =
   | { op: 'albums' }
   | { op: 'albumTracks'; albumId: number }
   | { op: 'search'; query: string }
+  | { op: 'songs'; query: SongsQuery }
 
 /** Convert a stored art filename into a URL served by the flacon-art:// protocol. */
 export const artUrl = (name: string): string => `flacon-art://art/${name}`
+
+// ---- Songs table ----
+
+export const SONG_SORTS = ['title', 'artist', 'album', 'duration', 'quality', 'added'] as const
+export type SongSort = (typeof SONG_SORTS)[number]
+
+export interface SongsQuery {
+  sort: SongSort
+  dir: 'asc' | 'desc'
+  /** Free-text filter (FTS5); empty = all songs. */
+  text: string
+  offset: number
+  limit: number
+}
+
+export interface LibrarySong {
+  id: number
+  path: string
+  title: string
+  artist: string
+  album: string
+  durationSec: number
+  quality: Quality
+  sampleRate: number
+  bitDepth: number | null
+  codec: string
+  offline: boolean
+  /** Sleeve placeholder/art for the 32px thumbnail. */
+  sleeve: string
+  /** Another file in the library has the same title, artist and duration (design: duplicates). */
+  duplicate: boolean
+}
+
+export interface SongsPage {
+  total: number
+  rows: LibrarySong[]
+}
+
+/** "24/96 · verified" style label for a song (design C6). */
+export function songQualityLabel(s: Pick<LibrarySong, 'quality' | 'sampleRate' | 'bitDepth' | 'codec' | 'offline'>): string {
+  if (s.offline) return 'drive offline'
+  const khz = s.sampleRate / 1000
+  const rate = Number.isInteger(khz) ? String(khz) : khz.toFixed(1)
+  switch (s.quality) {
+    case 'lossy': return s.codec.toUpperCase()
+    case 'upscaled': return `claims ${s.bitDepth ?? 24}/${rate} · upscaled`
+    case 'hires': return `${s.bitDepth ?? 24}/${rate} · verified`
+    case 'cd': return `${s.bitDepth ?? 16}/${rate} · full`
+  }
+}

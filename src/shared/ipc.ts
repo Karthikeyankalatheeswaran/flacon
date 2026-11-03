@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import type { Album, LibraryProgress } from './library'
+import { SONG_SORTS, type Album, type LibraryProgress, type SongsPage, type SongsQuery } from './library'
 import type { PlaybackCommand, PlaybackState } from './playback'
 
 // Every IPC payload crosses a trust boundary: main validates with these schemas before acting.
@@ -42,6 +42,7 @@ export interface FlaconBridge {
   /** Native folder picker; main persists the folder and scans it. */
   libraryAddFolder(): Promise<void>
   libraryPlayAlbum(albumId: string): Promise<void>
+  librarySongs(q: SongsQuery): Promise<SongsPage>
   getLibraryProgress(): Promise<LibraryProgress>
   onLibraryProgress(cb: (p: LibraryProgress) => void): () => void
   onLibraryChanged(cb: () => void): () => void
@@ -55,3 +56,11 @@ export interface EngineBridge {
   onCommand(cb: (c: PlaybackCommand | { type: 'resume-context' }) => void): () => void
   emitState(s: PlaybackState): void
 }
+
+export const SongsQuerySchema = z.object({
+  sort: z.enum(SONG_SORTS),
+  dir: z.enum(['asc', 'desc']),
+  text: z.string().max(200),
+  offset: z.number().int().min(0).max(10_000_000),
+  limit: z.number().int().min(1).max(500)
+})

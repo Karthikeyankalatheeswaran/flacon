@@ -1,8 +1,8 @@
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { app, BrowserWindow, dialog, ipcMain, nativeTheme, net, powerMonitor, powerSaveBlocker, protocol } from 'electron'
-import { AlbumIdSchema, Channels, SearchQuerySchema, ThemeSchema, type AppState, type ThemeSetting } from '@shared/ipc'
-import type { Album, LibraryProgress, LibraryTrack } from '@shared/library'
+import { AlbumIdSchema, Channels, SearchQuerySchema, SongsQuerySchema, ThemeSchema, type AppState, type ThemeSetting } from '@shared/ipc'
+import type { Album, LibraryProgress, LibraryTrack, SongsPage } from '@shared/library'
 import { AUDIO_EXTENSIONS, initialPlayback, isAudioPath, type PlaybackState } from '@shared/playback'
 import { createEngineWindow, dispatch, isEngine, sendToEngine, shutdownEngine } from './engine'
 import { artDir, call as libraryCall, getProgress, startLibrary, stopLibrary } from './library/client'
@@ -99,6 +99,7 @@ function registerIpc(): void {
     const q = SearchQuerySchema.parse(raw)
     return q.trim() ? libraryCall<Album[]>({ op: 'search', query: q }) : libraryCall<Album[]>({ op: 'albums' })
   })
+  ipcMain.handle(Channels.librarySongs, (_e, raw: unknown) => libraryCall<SongsPage>({ op: 'songs', query: SongsQuerySchema.parse(raw) }))
   ipcMain.handle(Channels.libraryGetProgress, () => getProgress())
   ipcMain.handle(Channels.libraryAddFolder, async () => {
     const opts = { properties: ['openDirectory', 'multiSelections'] as Array<'openDirectory' | 'multiSelections'> }

@@ -49,3 +49,17 @@ Known gaps / decisions: `ffmpeg-static` is a GPL/nonfree build without soxr — 
 `npm run rebuild:native` fetches the Electron-ABI binary of better-sqlite3 (pinned to 11.x: 13.x prebuilds segfault on Electron 33). `FLACON_LIBRARY_FOLDER=/path` seeds a folder for smoke tests.
 
 Not yet: CUE sheets, WebP thumbnails (64/256/600) and dominant-colour extraction (tint is a deterministic hash of the album for now), measured spectral ceiling (shown value is the nominal Nyquist), Songs/Artists/Folders views, macOS security-scoped bookmarks, persisted folder list UI, rate-limited rescans on network drives, automated DB tests (the Electron-ABI binary can't load in vitest; DB behaviour is covered by the Electron smoke test).
+
+## Songs view
+
+The Songs tab (Library → Songs) is a virtualized table: 48px rows, windowed 200-row SQL pages
+(`library songs` op) so a 100k-song library scrolls without loading it all.
+
+- Sort by Title / Artist / Album / Time / Quality (`aria-sort`); sorting resets selection.
+- Selection: click, Shift-click range, Ctrl/Cmd-click toggle, ↑/↓ (+Shift), Ctrl/Cmd-A. Pure logic in `src/shared/selection.ts` (tested).
+- Enter or double-click plays from the row (following rows queue behind it); offline rows are dimmed and not playable.
+- Duplicates (same title/artist/duration) are flagged. Column widths are resizable and persist.
+- The search box filters Songs and Albums with the same FTS query.
+
+Testing with a real file: symlink it into a folder and launch with
+`FLACON_LOG_STATE=1 FLACON_LIBRARY_FOLDER=/tmp/flacon-real npx electron out/main/index.js`.
