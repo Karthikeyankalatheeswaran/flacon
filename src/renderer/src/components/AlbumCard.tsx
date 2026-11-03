@@ -33,7 +33,7 @@ export function AlbumCard({ album, onRelease, onDragState, vesselLeft, onPlay }:
       tabIndex={0}
       onDoubleClick={() => !album.offline && onPlay(album)}
       onKeyDown={(e) => e.key === 'Enter' && !album.offline && onPlay(album)}
-      aria-label={`${album.title}, ${album.artist}. Press Enter to play, or drag into the vessel to pour.`}
+      aria-keyshortcuts="Enter"
       drag
       dragSnapToOrigin
       dragElastic={1}
@@ -54,6 +54,8 @@ export function AlbumCard({ album, onRelease, onDragState, vesselLeft, onPlay }:
         <i />
       </div>
       <span className="t-label" style={{ color: up ? 'var(--warn)' : 'var(--ink-2)', marginTop: 8 }}>{qualityLabel(album)}</span>
+      {/* Name = visible text + this hint, so voice-control users can say what they see (WCAG 2.5.3). */}
+      <span className="sr-only">. Press Enter to play, or drag into the vessel to pour.</span>
     </motion.div>
   )
 }

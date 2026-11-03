@@ -159,3 +159,6 @@ Running the fetcher against archive.org for the first time (`E2E_NET=1 npx vites
 3. Archive's old-style `licenses/publicdomain/` URL (no version) wasn't recognised as Public Domain.
 4. The minimal LGPL ffmpeg lacked the PCM/FLAC muxers and encoders the verifier/tagger use → added to the build scripts.
 5. Dev builds silently fell back to the GPL ffmpeg-static (wrong `vendor/` path) so the above only showed up with the bundled one.
+
+### Accessibility
+`npm run test:e2e` now includes an axe-core audit of every screen in light and dark (clean; it found and fixed four real issues). **A real VoiceOver/NVDA pass has still not been done** — see [docs/accessibility.md](docs/accessibility.md) for the exact script.

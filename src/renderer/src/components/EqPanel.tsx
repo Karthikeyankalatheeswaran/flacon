@@ -46,7 +46,7 @@ export function EqPanel(): JSX.Element {
         <button type="button" className="ghost-btn" onClick={() => close(false)} aria-label="Close equalizer">Close</button>
       </header>
       <Curve gains={eq.gains} on={eq.enabled} />
-      <div className="eq-bands" style={{ opacity: eq.enabled ? 1 : 0.5 }}>
+      <div className={`eq-bands${eq.enabled ? '' : ' off'}`}>
         {EQ_FREQS.map((f, i) => (
           <label key={f} className="eq-band">
             <input type="range" min={-EQ_RANGE_DB} max={EQ_RANGE_DB} step={0.5} value={eq.gains[i]} aria-label={`${freqLabel(f)} Hz`} aria-valuetext={signed(eq.gains[i]!)}

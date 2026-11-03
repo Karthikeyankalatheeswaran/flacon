@@ -95,7 +95,7 @@ describe('app (fresh profile)', () => {
 
   it('lists songs, sorts by a header, and keeps the table accessible', async () => {
     await page.getByRole('tab', { name: 'Songs' }).click()
-    await page.getByRole('table', { name: 'Songs' }).waitFor()
+    await page.getByRole('grid', { name: 'Songs' }).waitFor()
     await page.getByRole('row', { name: /Moth/ }).waitFor()
     await page.getByRole('button', { name: /^Time/ }).click()
     expect(await page.getByRole('columnheader', { name: /Time/ }).getAttribute('aria-sort')).toBe('descending')

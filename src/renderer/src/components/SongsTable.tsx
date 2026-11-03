@@ -168,7 +168,7 @@ export function SongsTable({ text }: { text: string }): JSX.Element {
         )}
         <span style={{ marginLeft: 'auto' }}>Shift-click range · Ctrl-click add</span>
       </div>
-      <div role="table" aria-label="Songs" aria-multiselectable="true" aria-rowcount={count + 1} className="songs" onKeyDown={onKeyDown} tabIndex={0}>
+      <div role="grid" aria-label="Songs" aria-multiselectable="true" aria-rowcount={count + 1} className="songs" onKeyDown={onKeyDown} tabIndex={0}>
         <div role="row" className="srow shead t-label" style={{ gridTemplateColumns: grid }}>
           {COLUMNS.map((c, i) => (
             <div key={c.key} role="columnheader" className="hcell" style={{ justifyContent: c.align === 'end' ? 'flex-end' : undefined }}
@@ -182,8 +182,8 @@ export function SongsTable({ text }: { text: string }): JSX.Element {
             </div>
           ))}
         </div>
-        <div className="sbody" ref={scrollRef} aria-busy={total === null}>
-          <div style={{ height: virt.getTotalSize(), position: 'relative' }}>
+        <div className="sbody" ref={scrollRef} aria-busy={total === null} role="rowgroup">
+          <div role="presentation" style={{ height: virt.getTotalSize(), position: 'relative' }}>
             {total !== null && count === 0 && (
               <div className="empty" role="status" style={{ position: 'absolute', inset: 0, height: 'auto' }}>
                 <h2 className="t-title">{text.trim() ? `Nothing matches “${text}”` : 'No songs yet'}</h2>
@@ -198,7 +198,7 @@ export function SongsTable({ text }: { text: string }): JSX.Element {
                 // Skeleton exactly as tall as a real row: no layout shift while a page loads.
                 return (
                   <div key={it.key} role="row" aria-rowindex={it.index + 2} className="srow" style={pos}>
-                    <span className="t-label ink-2" style={{ textAlign: 'right' }}>{it.index + 1}</span>
+                    <span className="t-label ink-2" role="gridcell" style={{ textAlign: 'right' }}>{it.index + 1}</span>
                     <span className="skel" style={{ width: '60%' }} /><span className="skel" style={{ width: '40%' }} /><span className="skel" style={{ width: '40%' }} /><span /><span />
                   </div>
                 )
@@ -209,16 +209,16 @@ export function SongsTable({ text }: { text: string }): JSX.Element {
                   style={{ ...pos, opacity: s.offline ? 0.4 : 1 }}
                   onClick={(e) => { setFocus(it.index); setSel((p) => applyClick(p, it.index, { shift: e.shiftKey, toggle: e.metaKey || e.ctrlKey })) }}
                   onDoubleClick={() => !s.offline && playFrom(it.index)}>
-                  <span className="t-label ink-2" style={{ textAlign: 'right' }}>{it.index + 1}</span>
-                  <span className="cell" role="cell" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <span className="t-label ink-2" role="gridcell" style={{ textAlign: 'right' }}>{it.index + 1}</span>
+                  <span className="cell" role="gridcell" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                     <i className="thumb" style={{ background: s.sleeve }} />
                     <span className="ell" dir="auto">{s.title}</span>
                     {s.duplicate && <span className="t-label ink-2" title="Another copy of this song is in your library">duplicate</span>}
                   </span>
-                  <span className="cell ink-2 ell" role="cell" dir="auto">{s.artist}</span>
-                  <span className="cell ink-2 ell" role="cell" dir="auto">{s.album}</span>
-                  <span className="cell t-label ink-2" role="cell" style={{ textAlign: 'right', fontSize: 13 }}>{timecode(s.durationSec)}</span>
-                  <span className="cell" role="cell" style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+                  <span className="cell ink-2 ell" role="gridcell" dir="auto">{s.artist}</span>
+                  <span className="cell ink-2 ell" role="gridcell" dir="auto">{s.album}</span>
+                  <span className="cell t-label ink-2" role="gridcell" style={{ textAlign: 'right', fontSize: 13 }}>{timecode(s.durationSec)}</span>
+                  <span className="cell" role="gridcell" style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
                     <span className="fill" style={{ width: 64, flexShrink: 0, margin: 0, background: up ? 'repeating-linear-gradient(90deg,var(--warn) 0 1px,transparent 1px 4px)' : 'var(--rule)' }}>
                       <b style={{ width: `${fillPercent(s)}%`, background: s.quality === 'hires' ? 'var(--tint-ink)' : s.quality === 'lossy' ? 'var(--ink-2)' : 'var(--ink)' }} /><i />
                     </span>

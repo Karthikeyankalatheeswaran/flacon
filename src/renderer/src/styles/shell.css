@@ -99,6 +99,7 @@
 .eq-head { display: flex; align-items: center; gap: 16px; margin-bottom: 12px; }
 .eq-bands { display: grid; grid-template-columns: repeat(10, 1fr); gap: 4px; margin-top: 8px; }
 .eq-band { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.eq-bands.off input[type=range] { opacity: .5; } /* dim the sliders, never the text (contrast) */
 .eq-band input[type=range] { writing-mode: vertical-lr; direction: rtl; height: 140px; width: 24px; accent-color: var(--tint-ink); }
 .eq-foot { display: flex; align-items: center; gap: 24px; margin-top: 16px; color: var(--ink-2); }
 .eq-foot select { font: inherit; background: var(--well); color: var(--ink); border: 1px solid var(--rule); padding: 4px 8px; }
