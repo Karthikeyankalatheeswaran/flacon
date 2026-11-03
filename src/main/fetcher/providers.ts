@@ -66,6 +66,8 @@ export function parseLicense(url: string | undefined | null): License | undefine
   const m = /\/licenses\/([a-z-]+)\/(\d\.\d)/.exec(u.pathname)
   if (m) return { name: `CC ${m[1]!.toUpperCase()} ${m[2]}`, url, attribution: m[1]!.includes('by') ? 'Attribution required' : undefined }
   if (/\/publicdomain\/zero\//.test(u.pathname)) return { name: 'CC0', url }
+  // Old-style Internet Archive marker ("licenses/publicdomain/", no version): a real, common value.
+  if (/\/licenses\/publicdomain\/?$/.test(u.pathname)) return { name: 'Public Domain', url }
   if (/\/publicdomain\/mark\//.test(u.pathname)) return { name: 'Public Domain', url }
   return undefined
 }

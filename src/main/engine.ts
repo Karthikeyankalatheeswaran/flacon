@@ -23,7 +23,7 @@ export function resolveFfmpeg(): { path: string; soxr: boolean } {
   if (override) return { path: override, soxr: process.env['FLACON_SOXR'] === '1' }
   const bundled = app.isPackaged
     ? join(process.resourcesPath, 'ffmpeg', exe)
-    : join(app.getAppPath(), 'vendor', 'ffmpeg', `${process.platform}-${process.arch}`, exe)
+    : join(__dirname, '..', '..', 'vendor', 'ffmpeg', `${process.platform}-${process.arch}`, exe)
   if (existsSync(bundled)) return { path: bundled, soxr: true }
   return { path: (ffmpegPath ?? '').replace('app.asar', 'app.asar.unpacked'), soxr: false }
 }

@@ -151,3 +151,11 @@ Not yet: screen-reader pass with VoiceOver/NVDA, high-contrast mode, per-device 
 - **Artists / Folders tabs:** Artists groups by album artist (case/accent-insensitive); Folders browses the library as it sits on disk and plays from the chosen track.
 - **Archivo** is bundled (variable woff2 via `@fontsource-variable/archivo`), served under the strict CSP.
 - **Engine fix found by the new E2E tests:** a seek/skip whose new stream decoded inside the 10 ms fade-out window had its first audio and track mark discarded by the flush, leaving playback stuck in "loading". The worklet now flushes only audio written before the flush point.
+
+### First real-network fetch (Internet Archive) — what it found
+Running the fetcher against archive.org for the first time (`E2E_NET=1 npx vitest run --config vitest.e2e.config.ts e2e/fetch.e2e.ts`, downloads ~4 MB of public-domain FLAC to a temp folder) exposed five bugs the mocked tests could not:
+1. Electron's `net.fetch(..., {redirect:'manual'})` cancels instead of returning the 3xx, so every archive.org `/download/` (302 → data node) failed → new `netFetch.ts` with real manual redirects, each hop still SSRF-checked.
+2. An extra `'data'` listener (for progress) on the download stream intermittently corrupted the written file (~4 of 5 runs) → progress now reported from an awaited write loop; verified bit-exact 6/6.
+3. Archive's old-style `licenses/publicdomain/` URL (no version) wasn't recognised as Public Domain.
+4. The minimal LGPL ffmpeg lacked the PCM/FLAC muxers and encoders the verifier/tagger use → added to the build scripts.
+5. Dev builds silently fell back to the GPL ffmpeg-static (wrong `vendor/` path) so the above only showed up with the bundled one.

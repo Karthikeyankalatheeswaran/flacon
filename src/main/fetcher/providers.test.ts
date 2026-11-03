@@ -10,6 +10,7 @@ describe('licences', () => {
   it('names Creative Commons and public-domain licences, drops everything else', () => {
     expect(parseLicense('https://creativecommons.org/licenses/by-sa/4.0/')).toMatchObject({ name: 'CC BY-SA 4.0' })
     expect(parseLicense('http://creativecommons.org/licenses/by-nc-nd/3.0/us/')).toMatchObject({ name: 'CC BY-NC-ND 3.0' })
+    expect(parseLicense('http://creativecommons.org/licenses/publicdomain/')).toMatchObject({ name: 'Public Domain' })
     expect(parseLicense('https://creativecommons.org/publicdomain/zero/1.0/')).toEqual({ name: 'CC0', url: 'https://creativecommons.org/publicdomain/zero/1.0/' })
     expect(parseLicense('https://example.com/licenses/by/4.0/')).toBeUndefined()
     expect(parseLicense('')).toBeUndefined()

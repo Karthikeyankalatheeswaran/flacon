@@ -7,7 +7,7 @@ VER=${FFMPEG_VERSION:-7.1.1}
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 OUT="$ROOT/vendor/ffmpeg/win32-x64"
 W=$(mktemp -d); trap 'rm -rf "$W"' EXIT
-curl -sSLf -o "$W/ff.tar.xz" "https://ffmpeg.org/releases/ffmpeg-$VER.tar.xz"
+curl -sSLf --retry 5 --retry-delay 3 --retry-all-errors -o "$W/ff.tar.xz" "https://ffmpeg.org/releases/ffmpeg-$VER.tar.xz"
 tar xf "$W/ff.tar.xz" -C "$W"
 cd "$W/ffmpeg-$VER"
 ./configure --arch=x86_64 --target-os=mingw32 --disable-everything --disable-autodetect --disable-doc --disable-debug --disable-network --disable-ffplay --disable-ffprobe \
@@ -15,7 +15,7 @@ cd "$W/ffmpeg-$VER"
   --enable-protocol=file,pipe --enable-demuxer=flac,wav,aiff,mov,mp3,ogg,matroska,dsf,ape,wv,caf,aac,w64 \
   --enable-parser=flac,mpegaudio,aac,vorbis,opus \
   --enable-decoder=flac,alac,pcm_s16le,pcm_s16be,pcm_s24le,pcm_s24be,pcm_s32le,pcm_s32be,pcm_f32le,pcm_f32be,pcm_f64le,pcm_u8,mp3,mp3float,aac,vorbis,opus,dsd_lsbf,dsd_msbf,dsd_lsbf_planar,dsd_msbf_planar,ape,wavpack \
-  --enable-filter=aresample,aformat,anull,volume --enable-muxer=pcm_f32le,null --enable-encoder=pcm_f32le
+  --enable-filter=aresample,aformat,anull,volume --enable-muxer=pcm_s16le,pcm_s24le,pcm_s32le,pcm_f32le,flac,null --enable-encoder=pcm_s16le,pcm_s24le,pcm_s32le,pcm_f32le
 make -j"$(nproc)"
 mkdir -p "$OUT"; cp ffmpeg.exe "$OUT/"
 # Ship every non-system DLL ffmpeg needs (libsoxr + its runtime deps) beside the exe.

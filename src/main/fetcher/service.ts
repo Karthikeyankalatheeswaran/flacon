@@ -1,6 +1,6 @@
 import { promises as fs, readFileSync, writeFileSync } from 'node:fs'
 import { basename, join } from 'node:path'
-import { app, net } from 'electron'
+import { app } from 'electron'
 import chokidar, { type FSWatcher } from 'chokidar'
 import yauzl from 'yauzl'
 import type { FetchJob } from '@shared/fetch'
@@ -9,6 +9,7 @@ import { FetchSettingsSchema, defaultFetchSettings, type EnqueueResponse, type F
 import { z } from 'zod'
 import type { FetchFn } from './download'
 import { FetchManager } from './manager'
+import { electronFetch } from './netFetch'
 import { PROVIDERS, ProviderError, type ProviderCtx } from './providers'
 
 interface ServiceDeps {
@@ -18,8 +19,7 @@ interface ServiceDeps {
   onImported(libraryRoot: string): void
 }
 
-// net.fetch uses Chromium's network stack, so the system proxy and certificate store apply.
-const fetchFn: FetchFn = (url, init) => net.fetch(url, init as RequestInit) as Promise<Response>
+const fetchFn: FetchFn = electronFetch
 
 let manager: FetchManager | null = null
 let settings: FetchSettings = defaultFetchSettings
@@ -28,7 +28,7 @@ const limiter = new HostLimiter()
 let searchAbort: AbortController | null = null
 
 const settingsFile = (): string => join(app.getPath('userData'), 'fetch-settings.json')
-const libraryRoot = (): string => join(app.getPath('music'), 'Flacon')
+const libraryRoot = (): string => process.env['FLACON_IMPORT_DIR'] ?? join(app.getPath('music'), 'Flacon') // env override is for tests only
 
 function loadSettings(): FetchSettings {
   try {

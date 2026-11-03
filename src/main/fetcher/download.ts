@@ -86,13 +86,22 @@ export async function download(url: string, dest: string, o: DownloadOptions): P
   }
 
   let received = have
+  // NB: no extra 'data' listener on this stream (for progress): alongside the consumer it intermittently corrupted the written file. Progress is reported from the write loop.
   const body = Readable.fromWeb(res.body as never)
-  body.on('data', (c: Buffer) => {
-    received += c.length
-    o.onProgress?.(received, total)
-  })
   // flags 'a' to append when resuming, 'w' to truncate when restarting.
-  await pipeline(body, createWriteStream(part, { flags: resumed ? 'a' : 'w' }), { signal: o.signal })
+  const fh = await fs.open(part, resumed ? 'a' : 'w')
+  try {
+    // Sequential awaited writes (no stream coalescing): each chunk is on disk before the next is taken.
+    for await (const chunk of body) {
+      if (o.signal.aborted) throw new DOMException('Aborted', 'AbortError')
+      await fh.write(chunk as Uint8Array)
+      received += (chunk as Uint8Array).length
+      o.onProgress?.(received, total)
+    }
+  } finally {
+    body.destroy()
+    await fh.close()
+  }
   if (total > 0 && received !== total) throw new DownloadError('The download ended early.', false)
   await fs.rename(part, dest)
   return { bytes: received }
