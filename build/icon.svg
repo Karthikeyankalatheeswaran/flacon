@@ -1,11 +1,15 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
   <defs>
-    <linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1b3a46"/><stop offset="1" stop-color="#0e242d"/></linearGradient>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#17343f"/><stop offset="1" stop-color="#0a1c23"/></linearGradient>
+    <linearGradient id="liq" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f4d37e"/><stop offset="1" stop-color="#e0a93c"/></linearGradient>
+    <!-- Flask silhouette: round body + neck (the "flacon"). -->
+    <clipPath id="flask"><path d="M432 250h160v128c92 38 152 118 152 214 0 124-100 224-232 224S280 716 280 592c0-96 60-176 152-214z"/></clipPath>
   </defs>
-  <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#g)"/>
-  <!-- Spectrum "fill line" motif: the F is three level bars; the middle is the measured ceiling. -->
-  <rect x="300" y="276" width="62" height="472" rx="31" fill="#f2f2ef"/>
-  <rect x="300" y="276" width="400" height="62" rx="31" fill="#f2f2ef"/>
-  <rect x="300" y="470" width="300" height="62" rx="31" fill="#e9c46a"/>
-  <rect x="300" y="686" width="62" height="62" rx="31" fill="#f2f2ef"/>
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#bg)"/>
+  <!-- liquid: its surface is a sound wave -->
+  <g clip-path="url(#flask)">
+    <path d="M212 600 C262 600 262 510 312 510 C362 510 362 600 412 600 C462 600 462 510 512 510 C562 510 562 600 612 600 C662 600 662 510 712 510 C762 510 762 600 812 600 V860 H212z" fill="url(#liq)"/>
+  </g>
+  <path d="M432 250h160v128c92 38 152 118 152 214 0 124-100 224-232 224S280 716 280 592c0-96 60-176 152-214z" fill="none" stroke="#f2f2ef" stroke-width="30" stroke-linejoin="round"/>
+  <rect x="404" y="214" width="216" height="44" rx="22" fill="#f2f2ef"/>
 </svg>
