@@ -65,6 +65,7 @@ function mockBridge(): FlaconBridge {
       if (c.type === 'toggle') setPb({ status: pb.status === 'playing' ? 'paused' : 'playing' })
       if (c.type === 'seek') setPb({ positionSec: c.seconds })
       if (c.type === 'volume') setPb({ volume: c.slider })
+      if (c.type === 'eq') setPb({ eq: c.eq })
     },
     openFiles: async () => {},
     onPlayback: (cb) => {

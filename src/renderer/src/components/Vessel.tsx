@@ -12,7 +12,7 @@ function spec(t: { sampleRate: number; bitDepth: number | null; codec: string; p
 
 // The vessel: now-playing sleeve + the queue you "pour" albums into. Tinted by the playing record.
 export function Vessel({ over }: { over: boolean }): JSX.Element {
-  const { queue, pb, send, openFiles } = useStore()
+  const { queue, pb, send, openFiles, eqOpen, setEqOpen } = useStore()
   const total = queue.reduce((s, a) => s + a.minutes, 0)
   const t = pb.track
   const playing = pb.status === 'playing'
@@ -66,7 +66,8 @@ export function Vessel({ over }: { over: boolean }): JSX.Element {
           <Icon name={playing ? 'pause' : 'play'} size={22} filled={!playing} />
         </button>
         <button type="button" className="ghost-btn" aria-label="Next" onClick={() => send({ type: 'next' })}><Icon name="next" size={20} filled /></button>
-        <button type="button" className="ghost-btn" style={{ marginLeft: 'auto' }} onClick={() => void openFiles()}>Open files…</button>
+        <button type="button" className="ghost-btn" style={{ marginLeft: 'auto' }} aria-pressed={eqOpen} onClick={() => setEqOpen(!eqOpen)}>EQ{pb.eq.enabled ? ' ·' : ''}</button>
+        <button type="button" className="ghost-btn" onClick={() => void openFiles()}>Open files…</button>
       </div>
       <div className="scrub" style={{ marginTop: 16 }}>
         <input type="range" min={0} max={1} step={0.01} value={pb.volume} aria-label="Volume" aria-valuetext={sliderLabel(pb.volume)}

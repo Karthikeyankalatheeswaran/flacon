@@ -1,8 +1,10 @@
+import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { app, BrowserWindow, dialog, ipcMain, nativeTheme, net, powerMonitor, powerSaveBlocker, protocol } from 'electron'
 import { AlbumIdSchema, Channels, SearchQuerySchema, SongsQuerySchema, ThemeSchema, type AppState, type ThemeSetting } from '@shared/ipc'
 import type { Album, LibraryProgress, LibraryTrack, SongsPage } from '@shared/library'
+import { defaultEq, sanitizeEq, type EqSettings } from '@shared/eq'
 import { AUDIO_EXTENSIONS, initialPlayback, isAudioPath, type PlaybackState } from '@shared/playback'
 import { createEngineWindow, dispatch, isEngine, sendToEngine, shutdownEngine } from './engine'
 import { artDir, call as libraryCall, getProgress, startLibrary, stopLibrary } from './library/client'
@@ -19,6 +21,31 @@ let playback: PlaybackState = { ...initialPlayback }
 let blockerId: number | null = null
 const pauseOnSuspend = true // becomes a setting in milestone 7
 let wasPlayingBeforeSuspend = false
+
+// EQ settings persist as a tiny JSON file; anything malformed falls back to flat (never blocks startup).
+const eqFile = (): string => join(app.getPath('userData'), 'eq.json')
+function loadEq(): EqSettings {
+  try {
+    return sanitizeEq(JSON.parse(readFileSync(eqFile(), 'utf8')))
+  } catch {
+    return defaultEq
+  }
+}
+let savedEq = ''
+let eqTimer: NodeJS.Timeout | undefined
+function persistEq(eq: EqSettings): void {
+  const json = JSON.stringify(eq)
+  if (json === savedEq) return
+  savedEq = json
+  clearTimeout(eqTimer)
+  eqTimer = setTimeout(() => {
+    try {
+      writeFileSync(eqFile(), json)
+    } catch {
+      /* read-only profile: the EQ just won't persist */
+    }
+  }, 400) // debounce slider drags
+}
 
 function snapshot(): AppState {
   return {
@@ -48,8 +75,9 @@ const trayDeps = {
 
 function onEngineState(s: PlaybackState): void {
   playback = s
+  persistEq(s.eq)
   // Diagnostics for smoke tests / bug reports; no effect unless the env var is set.
-  if (process.env['FLACON_LOG_STATE']) console.log('[state]', JSON.stringify({ st: s.status, i: s.queueIndex, n: s.queueLength, pos: +s.positionSec.toFixed(2), t: s.track?.title, sr: s.track?.sampleRate, bd: s.track?.bitDepth, rate: s.outputRate, toast: s.toast }))
+  if (process.env['FLACON_LOG_STATE']) console.log('[state]', JSON.stringify({ st: s.status, i: s.queueIndex, n: s.queueLength, pos: +s.positionSec.toFixed(2), t: s.track?.title, sr: s.track?.sampleRate, bd: s.track?.bitDepth, rate: s.outputRate, toast: s.toast, eq: s.eq.enabled ? s.eq.preset + ' ' + s.eq.preamp : 'off' }))
   for (const w of uiWindows()) w.webContents.send(Channels.playbackState, s)
   updateTray(s, trayDeps, mainWin)
   // Keep the machine awake (but the display free to sleep) only while audio is playing.
@@ -183,6 +211,9 @@ if (!app.requestSingleInstanceLock()) {
     registerPower()
     startLibraryService()
     createEngineWindow()
+    const eq = loadEq()
+    savedEq = JSON.stringify(eq) // don't rewrite what we just read
+    dispatch({ type: 'eq', eq }) // the engine queues it until its worklet has loaded
     mainWin = createMainWindow()
     createIslandWindow()
     createTray(playback, trayDeps)

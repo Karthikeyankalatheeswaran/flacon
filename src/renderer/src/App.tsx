@@ -4,6 +4,7 @@ import { Rail } from './components/Rail'
 import { AlbumGrid } from './components/AlbumGrid'
 import { Vessel } from './components/Vessel'
 import { Icon } from './components/icons'
+import { EqPanel } from './components/EqPanel'
 import { SongsTable } from './components/SongsTable'
 
 const TABS = ['Albums', 'Songs', 'Artists', 'Folders'] as const
@@ -15,6 +16,7 @@ export function App(): JSX.Element {
   const theme = useStore((s) => s.app?.theme ?? 'system')
   const setTheme = useStore((s) => s.setTheme)
   const scanning = useStore((s) => s.progress.phase === 'scanning')
+  const eqOpen = useStore((s) => s.eqOpen)
   const [over, setOver] = useState(false)
   const [tab, setTab] = useState<Tab>('Albums')
   const shellRef = useRef<HTMLDivElement>(null)
@@ -104,6 +106,7 @@ export function App(): JSX.Element {
         )}
       </main>
       <Vessel over={over} />
+      {eqOpen && <EqPanel />}
     </div>
   )
 }

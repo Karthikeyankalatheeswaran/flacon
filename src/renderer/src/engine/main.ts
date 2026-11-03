@@ -1,6 +1,7 @@
 // Audio engine: lives in a hidden BrowserWindow for the whole app session, so audio keeps
 // playing when the main window is closed. Owns the AudioContext, the worklet player, device
 // routing and navigator.mediaSession. Decoded PCM arrives from the decoder utilityProcess.
+import { EQ_FREQS, EQ_Q, bandType, type EqSettings } from '@shared/eq'
 import { gainFromSlider, initialPlayback, type PlaybackCommand, type PlaybackState, type TrackInfo, type TrackRef } from '@shared/playback'
 
 interface Stream {
@@ -198,6 +199,39 @@ function syncMediaSession(): void {
   }
 }
 
+// EQ chain: worklet → 10 biquads → preamp → limiter → destination. Params glide (20 ms) so moving a
+// band never clicks. Disabled = every stage at unity (limiter ratio 1), so the signal is untouched.
+let bands: BiquadFilterNode[] = []
+let preamp: GainNode
+let limiter: DynamicsCompressorNode
+
+function buildChain(): void {
+  bands = EQ_FREQS.map((f, i) => {
+    const b = new BiquadFilterNode(ctx, { type: bandType(i), frequency: f, Q: EQ_Q, gain: 0 })
+    return b
+  })
+  preamp = new GainNode(ctx, { gain: 1 })
+  limiter = new DynamicsCompressorNode(ctx, { threshold: 0, knee: 0, ratio: 1, attack: 0.002, release: 0.1 })
+  let prev: AudioNode = node
+  for (const b of bands) {
+    prev.connect(b)
+    prev = b
+  }
+  prev.connect(preamp)
+  preamp.connect(limiter)
+  limiter.connect(ctx.destination)
+}
+
+function applyEq(eq: EqSettings): void {
+  const t = ctx.currentTime
+  bands.forEach((b, i) => b.gain.setTargetAtTime(eq.enabled ? eq.gains[i]! : 0, t, 0.02))
+  preamp.gain.setTargetAtTime(eq.enabled ? 10 ** (eq.preamp / 20) : 1, t, 0.02)
+  // Brick-wall-ish safety limiter only while EQ is active; boosts can't clip the output.
+  limiter.threshold.setTargetAtTime(eq.enabled ? -1 : 0, t, 0.02)
+  limiter.ratio.setTargetAtTime(eq.enabled ? 20 : 1, t, 0.02)
+  push({ eq })
+}
+
 function setVolume(slider: number): void {
   node.port.postMessage({ type: 'gain', value: gainFromSlider(slider) })
   push({ volume: slider })
@@ -238,6 +272,7 @@ function handle(c: PlaybackCommand | { type: 'resume-context' }): void {
     case 'prev': startTrack(state.positionSec > 3 || index === 0 ? index : index - 1); break
     case 'seek': startTrack(index, c.seconds); break // new decode from the target; ring flushed with a 10 ms fade
     case 'volume': setVolume(c.slider); break
+    case 'eq': applyEq(c.eq); break
     case 'output': void setOutput(c.deviceId); break
     case 'resume-context': void ctx.resume(); break
   }
@@ -259,7 +294,7 @@ async function boot(): Promise<void> {
   ctx = new AudioContext({ latencyHint: 'playback' })
   await ctx.audioWorklet.addModule('./player-worklet.js')
   node = new AudioWorkletNode(ctx, 'flacon-player', { numberOfInputs: 0, outputChannelCount: [2] })
-  node.connect(ctx.destination)
+  buildChain()
   node.port.onmessage = (e) => onWorklet(e.data as Record<string, unknown>)
   setVolume(state.volume)
 

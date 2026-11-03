@@ -72,3 +72,17 @@ All island states are driven by one pure reducer (`src/shared/islandMachine.ts`,
 expanded island. The pill tint is derived per track and contrast-guarded. Placement (`islandPlacement.ts`) centres on the
 display under the cursor, straddles the notch on notched Macs, sits above the taskbar when docked bottom on Windows, and is
 re-applied on display changes (tested). Vitest now has a `vitest.config.ts` with the `@shared` alias.
+
+## M5 — EQ / DSP
+
+10-band graphic EQ (31 Hz–16 kHz, ±12 dB in 0.5 dB steps, shelves at the ends) plus preamp, in the engine window:
+`worklet → 10 BiquadFilters → preamp → safety limiter → destination`. Parameters glide over ~20 ms so dragging never clicks.
+Preamp auto-compensates the largest boost (shown in the panel); the limiter (−1 dB, 20:1) is only active while the EQ is on.
+With the EQ off every stage is at unity, labelled "bit-perfect path" in the UI.
+
+- Model, presets, response maths and zod schema: `src/shared/eq.ts` (tested). The curve in the panel uses the same biquad maths.
+- Command `{type:'eq', eq}` is validated in main, applied by the engine and echoed in `PlaybackState.eq` so all windows agree.
+- Persisted to `<userData>/eq.json` (debounced; malformed files fall back to flat) and replayed to the engine at launch.
+- UI: EQ button in the vessel opens the panel (Esc closes; sliders are native, keyboard-accessible, double-click resets a band).
+- Dev note: unpackaged `electron out/main/index.js` uses the `Electron` userData folder, not `flacon`.
+- Not yet: parametric bands, crossfeed, ReplayGain, per-device profiles.

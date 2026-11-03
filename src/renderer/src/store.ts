@@ -9,6 +9,8 @@ interface UiState {
   app: AppState | null
   albums: Album[]
   libraryLoaded: boolean
+  eqOpen: boolean
+  setEqOpen: (open: boolean) => void
   /** Bumped whenever the library changes on disk; tables refetch when it moves. */
   libraryVersion: number
   search: string
@@ -30,6 +32,8 @@ export const useStore = create<UiState>((set) => ({
   app: null,
   albums: [],
   libraryLoaded: false,
+  eqOpen: false,
+  setEqOpen: (eqOpen) => set({ eqOpen }),
   libraryVersion: 0,
   search: '',
   progress: { phase: 'idle', done: 0, total: 0, denied: [] },

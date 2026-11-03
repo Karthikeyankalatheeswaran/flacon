@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { defaultEq, EqSettingsSchema, type EqSettings } from './eq'
 
 export const AUDIO_EXTENSIONS = ['flac', 'alac', 'm4a', 'wav', 'aiff', 'aif', 'ape', 'wv', 'ogg', 'oga', 'opus', 'mp3', 'aac', 'wma', 'dsf', 'dff'] as const
 
@@ -20,7 +21,8 @@ export const PlaybackCommandSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('prev') }),
   z.object({ type: z.literal('seek'), seconds: z.number().min(0).max(36 * 3600) }),
   z.object({ type: z.literal('volume'), slider: z.number().min(0).max(1) }),
-  z.object({ type: z.literal('output'), deviceId: z.string().max(512) })
+  z.object({ type: z.literal('output'), deviceId: z.string().max(512) }),
+  z.object({ type: z.literal('eq'), eq: EqSettingsSchema })
 ])
 export type PlaybackCommand = z.infer<typeof PlaybackCommandSchema>
 
@@ -46,11 +48,12 @@ export interface PlaybackState {
   queueLength: number
   error: string | null
   toast: string | null
+  eq: EqSettings
 }
 
 export const initialPlayback: PlaybackState = {
   status: 'idle', track: null, positionSec: 0, volume: 0.8, outputRate: 0, outputLatencySec: 0,
-  queueIndex: 0, queueLength: 0, error: null, toast: null
+  queueIndex: 0, queueLength: 0, error: null, toast: null, eq: defaultEq
 }
 
 /** Perceptual volume: slider 0..1 → −60 dB..0 dB, applied in the float domain. 0 is true silence. */
