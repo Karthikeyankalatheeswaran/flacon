@@ -34,7 +34,9 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: npm }
       - run: npm ci
-      # Release gate: fails while ffmpeg-static (GPL/nonfree, no soxr) is the bundled binary. See docs/packaging.md.
+      - if: runner.os == 'macOS'
+        run: brew install libsoxr && scripts/build-ffmpeg.sh
+      # Release gate: fails unless the bundled ffmpeg is LGPL with soxr. Windows has no build script yet (docs/packaging.md), so it fails there by design.
       - run: npm run check:ffmpeg
       - run: npm run package
         env:

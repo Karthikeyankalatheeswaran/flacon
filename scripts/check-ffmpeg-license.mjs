@@ -1,13 +1,21 @@
 // Release gate: the ffmpeg we ship must be LGPL (no --enable-gpl / --enable-nonfree) and have soxr for high-quality resampling.
-// Usage: node scripts/check-ffmpeg-license.mjs [path-to-ffmpeg]   (defaults to $FLACON_FFMPEG or ffmpeg-static)
+// Usage: node scripts/check-ffmpeg-license.mjs [path-to-ffmpeg]   (defaults to $FLACON_FFMPEG, then vendor/ffmpeg/<platform>-<arch>/, then ffmpeg-static with --report only)
 // Exit code 1 = not shippable. `--report` prints the findings and always exits 0 (for dev builds).
 import { execFileSync } from 'node:child_process'
+import { existsSync } from 'node:fs'
 import { createRequire } from 'node:module'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 const args = process.argv.slice(2)
 const report = args.includes('--report')
 const given = args.find((a) => !a.startsWith('--'))
-const bin = given ?? process.env.FLACON_FFMPEG ?? createRequire(import.meta.url)('ffmpeg-static')
+const vendored = join(dirname(fileURLToPath(import.meta.url)), '..', 'vendor', 'ffmpeg', `${process.platform}-${process.arch}`, process.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg')
+const bin = given ?? process.env.FLACON_FFMPEG ?? (existsSync(vendored) ? vendored : report ? createRequire(import.meta.url)('ffmpeg-static') : null)
+if (!bin) {
+  console.log(`No bundled ffmpeg at ${vendored}. Build one with scripts/build-ffmpeg.sh (the GPL ffmpeg-static must not ship).`)
+  process.exit(1)
+}
 
 const out = execFileSync(bin, ['-hide_banner', '-buildconf'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }) +
   execFileSync(bin, ['-hide_banner', '-version'], { encoding: 'utf8' })

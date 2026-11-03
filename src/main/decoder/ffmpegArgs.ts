@@ -1,11 +1,13 @@
 import type { TrackInfo } from '@shared/playback'
 
 /** Decode to interleaved float32 stereo at the engine's rate, starting at `startSec` (fast input seek). */
-export function decodeArgs(path: string, startSec: number, sampleRate: number): string[] {
+export function decodeArgs(path: string, startSec: number, sampleRate: number, soxr = false): string[] {
   const args = ['-hide_banner', '-nostdin', '-loglevel', 'info']
   if (startSec > 0) args.push('-ss', startSec.toFixed(3))
-  // `-ac 2` downmixes 5.1+ to stereo; swr resamples to the context rate (soxr not in the dev build).
-  args.push('-i', path, '-vn', '-sn', '-dn', '-map', '0:a:0', '-f', 'f32le', '-acodec', 'pcm_f32le', '-ac', '2', '-ar', String(sampleRate), 'pipe:1')
+  // `-ac 2` downmixes 5.1+ to stereo. The bundled LGPL build has libsoxr (very high quality); the dev ffmpeg-static falls back to swr's default.
+  args.push('-i', path, '-vn', '-sn', '-dn', '-map', '0:a:0', '-f', 'f32le', '-acodec', 'pcm_f32le', '-ac', '2')
+  if (soxr) args.push('-af', `aresample=resampler=soxr:precision=28:out_sample_rate=${sampleRate}`)
+  args.push('-ar', String(sampleRate), 'pipe:1')
   return args
 }
 

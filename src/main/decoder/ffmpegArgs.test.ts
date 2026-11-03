@@ -29,6 +29,10 @@ describe('decodeArgs', () => {
     expect(a.indexOf('-ss')).toBeLessThan(a.indexOf('-i'))
     expect(a).toEqual(expect.arrayContaining(['-ac', '2', '-ar', '48000', 'f32le']))
   })
+  it('uses soxr only when the build has it', () => {
+    expect(decodeArgs('/m/a.flac', 0, 48000).join(' ')).not.toContain('soxr')
+    expect(decodeArgs('/m/a.flac', 0, 48000, true).join(' ')).toContain('resampler=soxr')
+  })
   it('titles from filename without extension', () => {
     expect(titleFromPath('C:\\Music\\01 Intro.flac')).toBe('01 Intro')
   })

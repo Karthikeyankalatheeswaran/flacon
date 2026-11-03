@@ -39,7 +39,7 @@ function close(id: number): void {
 
 function open(c: Extract<Cmd, { type: 'open' }>): void {
   if (!ffmpegPath) return send({ type: 'error', id: c.id, message: 'ffmpeg binary not found' })
-  const proc = spawn(ffmpegPath, decodeArgs(c.path, c.startSec, c.sampleRate), { stdio: ['ignore', 'pipe', 'pipe'] })
+  const proc = spawn(ffmpegPath, decodeArgs(c.path, c.startSec, c.sampleRate, process.env['FLACON_SOXR'] === '1'), { stdio: ['ignore', 'pipe', 'pipe'] })
   const s: Stream = { proc, sampleRate: c.sampleRate, inflight: 0, paused: false, leftover: Buffer.alloc(0) }
   streams.set(c.id, s)
 

@@ -13,8 +13,13 @@ Native `.node` files and ffmpeg are `asarUnpack`ed; `npmRebuild` is off because 
 - Windows: `CSC_LINK`/`CSC_KEY_PASSWORD` (Authenticode) or Azure Trusted Signing via electron-builder config.
 
 ## ffmpeg licence (blocking for release)
-`ffmpeg-static` is a GPL + nonfree build with no libsoxr. Before shipping, replace it with an **LGPL** build that has `libsoxr`
-(dynamic link, source offer) and keep `npm run check:ffmpeg` green. `check:ffmpeg --report` prints the build flags without failing.
+The app bundles its own decode-only **LGPL-2.1** ffmpeg (no `--enable-gpl`/`--enable-nonfree`) with **libsoxr** resampling, built by
+`scripts/build-ffmpeg.sh` into `vendor/ffmpeg/<platform>-<arch>/` (git-ignored) and shipped via `extraResources` as `Resources/ffmpeg/`.
+libsoxr (LGPL) is dynamically linked (`libsoxr.0.dylib` beside the binary) so it can be replaced. Source is unmodified ffmpeg from ffmpeg.org;
+ship the licence texts and a source offer in the release notes. `npm run check:ffmpeg` is the release gate and fails if the bundled binary is
+missing, GPL, nonfree or lacks soxr. Only macOS arm64 has been built so far: x64 needs the script run on an Intel Mac (or cross-built) and Windows
+needs the same configure flags under MSYS2 into `vendor/ffmpeg/win32-<arch>/`. At runtime the app prefers the bundled build, then falls back to the GPL
+`ffmpeg-static` for dev only.
 
 ## Updates
 `electron-updater` is wired (opt-out in Settings → Updates). It is inert in dev and in builds without `app-update.yml`.

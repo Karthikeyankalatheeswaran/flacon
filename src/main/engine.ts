@@ -1,5 +1,6 @@
+import { existsSync } from 'node:fs'
 import { join } from 'node:path'
-import { BrowserWindow, MessageChannelMain, utilityProcess, type UtilityProcess } from 'electron'
+import { app, BrowserWindow, MessageChannelMain, utilityProcess, type UtilityProcess } from 'electron'
 import ffmpegPath from 'ffmpeg-static'
 import { Channels } from '@shared/ipc'
 import { PlaybackCommandSchema, type PlaybackCommand } from '@shared/playback'
@@ -10,16 +11,27 @@ let decoder: UtilityProcess | null = null
 let ready = false
 const backlog: Array<PlaybackCommand | { type: 'resume-context' }> = []
 
-// In a packaged app ffmpeg lives outside the asar; electron-builder unpacks it (milestone 8).
-export function resolveFfmpeg(): string {
-  const p = process.env['FLACON_FFMPEG'] ?? ffmpegPath ?? ''
-  return p.replace('app.asar', 'app.asar.unpacked')
+const exe = process.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg'
+
+/**
+ * Order: explicit override, the bundled LGPL+soxr build (Resources/ffmpeg when packaged, vendor/ffmpeg when it
+ * has been built for this platform), then the GPL ffmpeg-static dev fallback (never shipped; see check:ffmpeg).
+ */
+export function resolveFfmpeg(): { path: string; soxr: boolean } {
+  const override = process.env['FLACON_FFMPEG']
+  if (override) return { path: override, soxr: process.env['FLACON_SOXR'] === '1' }
+  const bundled = app.isPackaged
+    ? join(process.resourcesPath, 'ffmpeg', exe)
+    : join(app.getAppPath(), 'vendor', 'ffmpeg', `${process.platform}-${process.arch}`, exe)
+  if (existsSync(bundled)) return { path: bundled, soxr: true }
+  return { path: (ffmpegPath ?? '').replace('app.asar', 'app.asar.unpacked'), soxr: false }
 }
 
 function spawnDecoder(): void {
+  const ff = resolveFfmpeg()
   decoder = utilityProcess.fork(join(__dirname, 'decoder.js'), [], {
     serviceName: 'flacon-decoder',
-    env: { ...process.env, FLACON_FFMPEG: resolveFfmpeg() } as Record<string, string>
+    env: { ...process.env, FLACON_FFMPEG: ff.path, FLACON_SOXR: ff.soxr ? '1' : '0' } as Record<string, string>
   })
   // A crashed decoder must not take playback down for good: respawn and re-link the engine.
   decoder.on('exit', () => {

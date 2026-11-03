@@ -256,7 +256,7 @@ function registerIpc(): void {
 
 function startFetchService(): void {
   void startFetcher({
-    ffmpeg: resolveFfmpeg(),
+    ffmpeg: resolveFfmpeg().path,
     onJobs: (jobs) => uiWindows().forEach((w) => w.webContents.send(Channels.fetchState, jobs)),
     onImported: (root) => {
       // The managed folder is added once; the watcher indexes new files, and an explicit scan covers the first import.
