@@ -4,7 +4,8 @@ import { app, shell, session, type BrowserWindow } from 'electron'
 export function contentSecurityPolicy(dev: boolean): string {
   return [
     "default-src 'self'",
-    `script-src 'self'`,
+    // Dev only: allow @vitejs/plugin-react's fast-refresh preamble (an inline script) by hash; packaged builds stay 'self'.
+    dev ? `script-src 'self' 'sha256-Z2/iFzh9VMlVkEOar1f/oSHWwQk3ve1qk/C2WdsC4Xk='` : `script-src 'self'`,
     `style-src 'self' 'unsafe-inline'`,
     "img-src 'self' data: blob: flacon-art:",
     "font-src 'self'",
