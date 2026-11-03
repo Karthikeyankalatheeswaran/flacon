@@ -12,8 +12,8 @@ function spec(t: { sampleRate: number; bitDepth: number | null; codec: string; p
 
 // The vessel: now-playing sleeve + the queue you "pour" albums into. Tinted by the playing record.
 export function Vessel({ over }: { over: boolean }): JSX.Element {
-  const { albums, queue, pb, send, openFiles } = useStore()
-  const total = queue.reduce((s, id) => s + (albums.find((a) => a.id === id)?.minutes ?? 0), 0)
+  const { queue, pb, send, openFiles } = useStore()
+  const total = queue.reduce((s, a) => s + a.minutes, 0)
   const t = pb.track
   const playing = pb.status === 'playing'
   const dur = t?.durationSec ?? 0
@@ -81,19 +81,15 @@ export function Vessel({ over }: { over: boolean }): JSX.Element {
         <span>{durationLabel(total)}</span>
       </div>
       <div style={{ overflowY: 'auto', minHeight: 0 }}>
-        {queue.map((id) => {
-          const a = albums.find((x) => x.id === id)
-          if (!a) return null
-          return (
-            <div key={id} className="vessel-row">
-              <div className="th" style={{ background: a.sleeve }} />
-              <div style={{ minWidth: 0 }}>
-                <div className="line1" style={{ fontWeight: 600 }} dir="auto">{a.title}</div>
-                <div className="t-label dim">{durationLabel(a.minutes)}</div>
-              </div>
+        {queue.map((a) => (
+          <div key={a.id} className="vessel-row">
+            <div className="th" style={{ background: a.sleeve }} />
+            <div style={{ minWidth: 0 }}>
+              <div className="line1" style={{ fontWeight: 600 }} dir="auto">{a.title}</div>
+              <div className="t-label dim">{durationLabel(a.minutes)}</div>
             </div>
-          )
-        })}
+          </div>
+        ))}
       </div>
       <div role="status" aria-live="polite" className="sr-only">{t ? `Now playing ${t.title}` : ''}</div>
       {toastShown && <div role="alert" className="toast">{toastShown}</div>}

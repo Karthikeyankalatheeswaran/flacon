@@ -19,6 +19,7 @@ export interface Album {
   minutes: number
   offline?: boolean
   tint: string
+  trackCount?: number
 }
 
 export const CD_LIMIT_KHZ = 22.05
@@ -87,3 +88,37 @@ export const sampleAlbums: Album[] = [
   { id: 'a12', title: 'Pilot Light — Single', artist: 'Salt & Ember', quality: 'hires', ceilingKhz: 47.1, minutes: 5, tint: '#16323D',
     sleeve: 'radial-gradient(circle at 30% 70%,#E9C46A 0 16%,transparent 16.5%),#16323D' }
 ]
+
+// ---- Library worker protocol (main ⇄ worker) and renderer-facing shapes ----
+
+export interface LibraryProgress {
+  phase: 'idle' | 'scanning'
+  done: number
+  total: number
+  /** Folders the OS would not let us read (macOS Full Disk Access / folder prompts). */
+  denied: string[]
+}
+
+export interface LibraryTrack {
+  id: number
+  path: string
+  title: string
+  artist: string
+  album: string
+  disc: number
+  track: number
+  durationSec: number
+}
+
+export type LibraryRequest =
+  | { op: 'init'; dbPath: string; artDir: string }
+  | { op: 'folders' }
+  | { op: 'addFolder'; path: string }
+  | { op: 'removeFolder'; path: string }
+  | { op: 'scan' }
+  | { op: 'albums' }
+  | { op: 'albumTracks'; albumId: number }
+  | { op: 'search'; query: string }
+
+/** Convert a stored art filename into a URL served by the flacon-art:// protocol. */
+export const artUrl = (name: string): string => `flacon-art://art/${name}`

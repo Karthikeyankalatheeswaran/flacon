@@ -7,13 +7,14 @@ interface Props {
   onRelease: (album: Album, projectedX: number) => boolean
   onDragState: (over: boolean) => void
   vesselLeft: () => number
+  onPlay: (album: Album) => void
 }
 
 // Pour: tracks 1:1 from the grab point; on release project x + v·0.998/(1−0.998). A projection
 // inside the vessel queues it; anything else springs home the way it came (design: Motion › Pour).
 const DECEL = 0.998
 
-export function AlbumCard({ album, onRelease, onDragState, vesselLeft }: Props): JSX.Element {
+export function AlbumCard({ album, onRelease, onDragState, vesselLeft, onPlay }: Props): JSX.Element {
   const hi = album.quality === 'hires'
   const up = album.quality === 'upscaled'
   const lossy = album.quality === 'lossy'
@@ -30,7 +31,9 @@ export function AlbumCard({ album, onRelease, onDragState, vesselLeft }: Props):
       className="card"
       role="button"
       tabIndex={0}
-      aria-label={`${album.title}, ${album.artist}. Drag into the vessel to pour.`}
+      onDoubleClick={() => !album.offline && onPlay(album)}
+      onKeyDown={(e) => e.key === 'Enter' && !album.offline && onPlay(album)}
+      aria-label={`${album.title}, ${album.artist}. Press Enter to play, or drag into the vessel to pour.`}
       drag
       dragSnapToOrigin
       dragElastic={1}

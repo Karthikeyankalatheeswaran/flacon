@@ -9,7 +9,11 @@ export default defineConfig({
     build: {
       rollupOptions: {
         // The decoder runs in its own utilityProcess, so it is a separate entry.
-        input: { index: resolve('src/main/index.ts'), decoder: resolve('src/main/decoder/decoder.ts') }
+        input: {
+          index: resolve('src/main/index.ts'),
+          decoder: resolve('src/main/decoder/decoder.ts'),
+          library: resolve('src/main/library/worker.ts')
+        }
       }
     }
   },

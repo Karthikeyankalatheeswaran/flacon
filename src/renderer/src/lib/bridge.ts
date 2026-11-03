@@ -1,4 +1,5 @@
 import type { AppState, FlaconBridge, ThemeSetting } from '@shared/ipc'
+import { sampleAlbums } from '@shared/library'
 import { initialPlayback, type PlaybackState } from '@shared/playback'
 
 // In Electron the preload bridge exists. In a plain browser (npm run dev:web) we mock it so the
@@ -50,7 +51,18 @@ function mockBridge(): FlaconBridge {
     onPlayback: (cb) => {
       psubs.add(cb)
       return () => psubs.delete(cb)
-    }
+    },
+    libraryAlbums: async () => sampleAlbums,
+    librarySearch: async (q) => {
+      const fold = (x: string): string => x.normalize('NFKD').replace(/\p{M}/gu, '').toLowerCase()
+      const n = fold(q.trim())
+      return n ? sampleAlbums.filter((a) => fold(`${a.title} ${a.artist}`).includes(n)) : sampleAlbums
+    },
+    libraryAddFolder: async () => {},
+    libraryPlayAlbum: async () => {},
+    getLibraryProgress: async () => ({ phase: 'idle', done: 0, total: 0, denied: [] }),
+    onLibraryProgress: () => () => {},
+    onLibraryChanged: () => () => {}
   }
 }
 

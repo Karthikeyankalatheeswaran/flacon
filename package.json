@@ -10,17 +10,23 @@
     "dev:web": "vite --config vite.web.config.ts",
     "build": "electron-vite build",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
-    "test": "vitest run"
+    "test": "vitest run",
+    "rebuild:native": "cd node_modules/better-sqlite3 && prebuild-install -r electron -t $(node -p \"require('../electron/package.json').version\") --arch $(node -p \"process.arch\")"
   },
   "dependencies": {
+    "@tanstack/react-virtual": "^3.14.25",
+    "better-sqlite3": "^11.10.0",
+    "chokidar": "^4.0.3",
     "ffmpeg-static": "^5.3.0",
     "framer-motion": "^11.18.2",
+    "music-metadata": "^11.2.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "zod": "^3.24.1",
     "zustand": "^5.0.3"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^9.6.0",
     "@types/node": "^22.10.5",
     "@types/react": "^18.3.18",
     "@types/react-dom": "^18.3.5",

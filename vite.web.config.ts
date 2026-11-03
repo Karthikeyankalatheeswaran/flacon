@@ -7,6 +7,7 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   root: resolve('src/renderer'),
   plugins: [react()],
-  resolve: { alias: { '@shared': resolve('src/shared'), '@': resolve('src/renderer/src') } },
+  resolve: { dedupe: ['react', 'react-dom'], alias: { '@shared': resolve('src/shared'), '@': resolve('src/renderer/src') } },
+  optimizeDeps: { include: ['react', 'react-dom/client', 'framer-motion', '@tanstack/react-virtual', 'zustand'] },
   server: { port: 5199, strictPort: true }
 })

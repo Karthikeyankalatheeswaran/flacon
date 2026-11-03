@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import type { Album, LibraryProgress } from './library'
 import type { PlaybackCommand, PlaybackState } from './playback'
 
 // Every IPC payload crosses a trust boundary: main validates with these schemas before acting.
@@ -36,7 +37,18 @@ export interface FlaconBridge {
   /** Native file picker; main validates extensions and starts playback. */
   openFiles(): Promise<void>
   onPlayback(cb: (s: PlaybackState) => void): () => void
+  libraryAlbums(): Promise<Album[]>
+  librarySearch(query: string): Promise<Album[]>
+  /** Native folder picker; main persists the folder and scans it. */
+  libraryAddFolder(): Promise<void>
+  libraryPlayAlbum(albumId: string): Promise<void>
+  getLibraryProgress(): Promise<LibraryProgress>
+  onLibraryProgress(cb: (p: LibraryProgress) => void): () => void
+  onLibraryChanged(cb: () => void): () => void
 }
+
+export const SearchQuerySchema = z.string().max(200)
+export const AlbumIdSchema = z.string().regex(/^\d{1,12}$/)
 
 /** Engine window's own minimal surface (separate preload). */
 export interface EngineBridge {

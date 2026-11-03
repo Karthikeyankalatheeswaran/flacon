@@ -34,3 +34,18 @@ Pipeline: UI/tray/OS → main (zod-validated `PlaybackCommand`) → hidden **eng
 - Debug: `FLACON_LOG_STATE=1` prints engine state from main (used for smoke tests).
 
 Known gaps / decisions: `ffmpeg-static` is a GPL/nonfree build without soxr — fine for development, must be replaced by an LGPL build (with soxr) before shipping. "Match source" rate and encoder delay/padding trimming, crossfade, ReplayGain, EQ are not implemented yet. MessagePortMain structured-clones (not transfers) ArrayBuffers. Not yet audibly/aurally verified; no seek/device/sleep-wake automated tests (Playwright suite comes with M8).
+
+## Milestone 3 — library (verified in real Electron against a fixture library)
+
+`library worker (utilityProcess)` owns SQLite (better-sqlite3, WAL, `user_version` migrations, corrupt DB moved aside and rebuilt), scanning, tag parsing (music-metadata), artwork and watching (chokidar). Main only proxies zod-validated requests; the renderer gets albums via the bridge and artwork through the `flacon-art://` protocol (hashed filenames only).
+
+- Incremental scan: walk → stat (size+mtime) → parse → upsert, batched in transactions, progress streamed to the rail. Skips hidden/AppleDouble files, corrupt files and non-audio; symlink loops and the same file via two paths are deduplicated; unreadable folders are reported ("Allow access in System Settings"); an unreachable root marks its albums offline instead of deleting them.
+- Tags: NUL/control stripping, mojibake repair (UTF-8 read as Latin-1/CP1252), multi-value artists, Album Artist / compilation → Various Artists, disc/track totals, missing tags fall back to folder/filename. Duplicate albums in different qualities group into one and show the highest quality.
+- Artwork: embedded first, then `cover|folder|front|album.{jpg,png,webp}`; >20 MB embedded art ignored; stored content-addressed.
+- Watching: debounced, awaits write-finish, moves/renames keep track identity (size+duration+tags), symlinks not followed.
+- Search: FTS5, `unicode61 remove_diacritics 2`, user input tokenised and quoted (no syntax injection), last token prefix-matched, latest-wins in the UI.
+- UI: virtualised album grid (TanStack Virtual), skeletons, empty/searching/no-results states, double-click or Enter plays an album.
+
+`npm run rebuild:native` fetches the Electron-ABI binary of better-sqlite3 (pinned to 11.x: 13.x prebuilds segfault on Electron 33). `FLACON_LIBRARY_FOLDER=/path` seeds a folder for smoke tests.
+
+Not yet: CUE sheets, WebP thumbnails (64/256/600) and dominant-colour extraction (tint is a deterministic hash of the album for now), measured spectral ceiling (shown value is the nominal Nyquist), Songs/Artists/Folders views, macOS security-scoped bookmarks, persisted folder list UI, rate-limited rescans on network drives, automated DB tests (the Electron-ABI binary can't load in vitest; DB behaviour is covered by the Electron smoke test).

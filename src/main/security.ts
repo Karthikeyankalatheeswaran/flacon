@@ -6,7 +6,7 @@ export function contentSecurityPolicy(dev: boolean): string {
     "default-src 'self'",
     `script-src 'self'`,
     `style-src 'self' 'unsafe-inline'`,
-    "img-src 'self' data: blob:",
+    "img-src 'self' data: blob: flacon-art:",
     "font-src 'self'",
     "media-src 'self' blob:", // engine's silent <audio> (media-session keepalive)
     "worker-src 'self' blob:",

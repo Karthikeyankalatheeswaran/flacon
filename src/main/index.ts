@@ -1,10 +1,17 @@
-import { app, BrowserWindow, dialog, ipcMain, nativeTheme, powerMonitor, powerSaveBlocker } from 'electron'
-import { Channels, ThemeSchema, type AppState, type ThemeSetting } from '@shared/ipc'
+import { join } from 'node:path'
+import { pathToFileURL } from 'node:url'
+import { app, BrowserWindow, dialog, ipcMain, nativeTheme, net, powerMonitor, powerSaveBlocker, protocol } from 'electron'
+import { AlbumIdSchema, Channels, SearchQuerySchema, ThemeSchema, type AppState, type ThemeSetting } from '@shared/ipc'
+import type { Album, LibraryProgress, LibraryTrack } from '@shared/library'
 import { AUDIO_EXTENSIONS, initialPlayback, isAudioPath, type PlaybackState } from '@shared/playback'
 import { createEngineWindow, dispatch, isEngine, sendToEngine, shutdownEngine } from './engine'
+import { artDir, call as libraryCall, getProgress, startLibrary, stopLibrary } from './library/client'
 import { installCsp } from './security'
 import { createTray, updateTray } from './tray'
 import { createIslandWindow, createMainWindow } from './windows'
+
+// Local artwork is served only through this scheme, from the art cache dir, by hashed filename.
+protocol.registerSchemesAsPrivileged([{ scheme: 'flacon-art', privileges: { standard: true, secure: true, supportFetchAPI: true } }])
 
 let theme: ThemeSetting = 'system'
 let mainWin: BrowserWindow | null = null
@@ -87,7 +94,52 @@ function registerIpc(): void {
   ipcMain.on(Channels.engineState, (e, s: PlaybackState) => {
     if (isEngine(e.sender.id)) onEngineState(s)
   })
+  ipcMain.handle(Channels.libraryAlbums, () => libraryCall<Album[]>({ op: 'albums' }))
+  ipcMain.handle(Channels.librarySearch, (_e, raw: unknown) => {
+    const q = SearchQuerySchema.parse(raw)
+    return q.trim() ? libraryCall<Album[]>({ op: 'search', query: q }) : libraryCall<Album[]>({ op: 'albums' })
+  })
+  ipcMain.handle(Channels.libraryGetProgress, () => getProgress())
+  ipcMain.handle(Channels.libraryAddFolder, async () => {
+    const opts = { properties: ['openDirectory', 'multiSelections'] as Array<'openDirectory' | 'multiSelections'> }
+    const r = mainWin && !mainWin.isDestroyed() ? await dialog.showOpenDialog(mainWin, opts) : await dialog.showOpenDialog(opts)
+    if (r.canceled) return
+    for (const path of r.filePaths) await libraryCall({ op: 'addFolder', path })
+    await libraryCall({ op: 'scan' })
+  })
+  ipcMain.handle(Channels.libraryPlayAlbum, async (_e, raw: unknown) => {
+    const albumId = Number(AlbumIdSchema.parse(raw))
+    const tracks = await libraryCall<LibraryTrack[]>({ op: 'albumTracks', albumId })
+    if (tracks.length) dispatch({ type: 'load', tracks: tracks.map((t) => ({ path: t.path })), index: 0 })
+  })
   nativeTheme.on('updated', broadcast)
+}
+
+function startLibraryService(): void {
+  protocol.handle('flacon-art', (req) => {
+    const name = new URL(req.url).pathname.split('/').pop() ?? ''
+    if (!/^[a-f0-9]{40}\.(jpg|png|webp|gif)$/.test(name)) return new Response(null, { status: 404 })
+    return net.fetch(pathToFileURL(join(artDir(), name)).toString())
+  })
+  const send = (ch: string, v: unknown): void => uiWindows().forEach((w) => w.webContents.send(ch, v))
+  void startLibrary({ progress: (p: LibraryProgress) => send(Channels.libraryProgress, p), changed: () => {
+      send(Channels.libraryChanged, null)
+      if (process.env['FLACON_LOG_STATE']) void libraryCall<Album[]>({ op: 'albums' }).then((a) => console.log('[library]', JSON.stringify(a.map((x) => ({ t: x.title, a: x.artist, q: x.quality, n: x.trackCount, min: x.minutes, art: /flacon-art/.test(x.sleeve), off: x.offline })))))
+    } })
+    .then((r) => {
+      if (r.recoveredFrom) console.warn('[library] database was corrupt; moved to', r.recoveredFrom) // user-facing notice arrives with settings UI
+      return libraryCall<string[]>({ op: 'folders' })
+    })
+    .then(async (f) => {
+      // Dev/smoke-test hook: seed a library folder without the native picker.
+      const seed = process.env['FLACON_LIBRARY_FOLDER']
+      if (seed && !f.includes(seed)) {
+        await libraryCall({ op: 'addFolder', path: seed })
+        f = [...f, seed]
+      }
+      return f.length ? libraryCall({ op: 'scan' }) : undefined // incremental rescan on launch
+    })
+    .catch((e: Error) => console.error('[library]', e.message))
 }
 
 function registerPower(): void {
@@ -116,7 +168,10 @@ if (!app.requestSingleInstanceLock()) {
     ;(globalThis as { __flaconQuitting?: boolean }).__flaconQuitting = true
     dispatch({ type: 'pause' }) // fade out via the worklet; queue persistence arrives with settings (milestone 7)
   })
-  app.on('will-quit', shutdownEngine)
+  app.on('will-quit', () => {
+    shutdownEngine()
+    stopLibrary()
+  })
   // window-all-closed deliberately does not quit: the island and the audio engine live on.
   app.on('window-all-closed', () => {})
   app.on('activate', () => trayDeps.showMain())
@@ -125,6 +180,7 @@ if (!app.requestSingleInstanceLock()) {
     installCsp()
     registerIpc()
     registerPower()
+    startLibraryService()
     createEngineWindow()
     mainWin = createMainWindow()
     createIslandWindow()
