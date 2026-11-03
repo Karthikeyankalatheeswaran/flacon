@@ -61,7 +61,11 @@ function closeAll(): void {
 function openStream(i: number, startSec: number): Stream {
   const s: Stream = { id: ++seq, index: i, startSec, ended: false, outstanding: 0 }
   streams.set(s.id, s)
-  toDecoder({ type: 'open', id: s.id, path: queue[i]!.path, startSec, sampleRate: ctx.sampleRate, first: true })
+  const ref = queue[i]!
+  // CUE slice: decode the real file from slice start (+ any seek into it) and stop at the slice end; position/duration stay slice-relative.
+  const base = ref.cue?.startSec ?? 0
+  const durationSec = ref.cue ? Math.max(0.001, ref.cue.endSec - base - startSec) : undefined
+  toDecoder({ type: 'open', id: s.id, path: ref.file ?? ref.path, startSec: base + startSec, durationSec, sampleRate: ctx.sampleRate, first: true })
   return s
 }
 
@@ -112,8 +116,11 @@ function onDecoder(m: { type: string; id: number; [k: string]: unknown }): void 
   const s = streams.get(m.id)
   if (!s) return // stale (seek/skip raced it)
   switch (m.type) {
-    case 'info':
-      s.info = m.info as TrackInfo
+    case 'info': {
+      const raw = m.info as TrackInfo
+      const ref = queue[s.index]
+      s.info = { ...raw, path: ref?.path ?? raw.path, title: ref?.title ?? raw.title, durationSec: ref?.cue ? Math.max(0, ref.cue.endSec - ref.cue.startSec) : raw.durationSec }
+    }
       if (s.id === want) push({ track: s.info })
       break
     case 'chunk': {

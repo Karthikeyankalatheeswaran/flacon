@@ -5,7 +5,7 @@ import type { Readable } from 'node:stream'
 import { decodeArgs, parseInfo, titleFromPath } from './ffmpegArgs'
 
 type Cmd =
-  | { type: 'open'; id: number; path: string; startSec: number; sampleRate: number; first: boolean }
+  | { type: 'open'; id: number; path: string; startSec: number; durationSec?: number; sampleRate: number; first: boolean }
   | { type: 'credit'; id: number; frames: number }
   | { type: 'close'; id: number }
 
@@ -39,7 +39,7 @@ function close(id: number): void {
 
 function open(c: Extract<Cmd, { type: 'open' }>): void {
   if (!ffmpegPath) return send({ type: 'error', id: c.id, message: 'ffmpeg binary not found' })
-  const proc = spawn(ffmpegPath, decodeArgs(c.path, c.startSec, c.sampleRate, process.env['FLACON_SOXR'] === '1'), { stdio: ['ignore', 'pipe', 'pipe'] })
+  const proc = spawn(ffmpegPath, decodeArgs(c.path, c.startSec, c.sampleRate, process.env['FLACON_SOXR'] === '1', c.durationSec), { stdio: ['ignore', 'pipe', 'pipe'] })
   const s: Stream = { proc, sampleRate: c.sampleRate, inflight: 0, paused: false, leftover: Buffer.alloc(0) }
   streams.set(c.id, s)
 

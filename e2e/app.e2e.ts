@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { _electron as electron, type ElectronApplication, type Page } from 'playwright-core'
@@ -12,8 +12,8 @@ const root = mkdtempSync(join(tmpdir(), 'flacon-e2e-'))
 const lib = join(root, 'music')
 afterAll(() => rmSync(root, { recursive: true, force: true }))
 
-const tone = (file: string, hz: number, tags: Record<string, string>): void =>
-  void execFileSync(ffmpegPath as string, ['-v', 'error', '-y', '-f', 'lavfi', '-i', `sine=f=${hz}:d=40:r=44100`, '-sample_fmt', 's16', ...Object.entries(tags).flatMap(([k, v]) => ['-metadata', `${k}=${v}`]), file])
+const tone = (file: string, hz: number, tags: Record<string, string>, seconds = 40): void =>
+  void execFileSync(ffmpegPath as string, ['-v', 'error', '-y', '-f', 'lavfi', '-i', `sine=f=${hz}:d=${seconds}:r=44100`, '-sample_fmt', 's16', ...Object.entries(tags).flatMap(([k, v]) => ['-metadata', `${k}=${v}`]), file])
 
 async function launch(userData: string, extraArgs: string[] = [], env: Record<string, string> = {}): Promise<ElectronApplication> {
   return electron.launch({
@@ -40,12 +40,16 @@ const until = async <T>(f: () => Promise<T | false | undefined>, ms = 20_000): P
     await new Promise((r) => setTimeout(r, 150))
   }
 }
-const pb = (p: Page) => p.evaluate(() => (window as unknown as { flacon: { getPlayback(): Promise<{ status: string; positionSec: number; queueIndex: number; track: { title: string } | null; eq: { preset: string; enabled: boolean } }> } }).flacon.getPlayback())
+const pb = (p: Page) => p.evaluate(() => (window as unknown as { flacon: { getPlayback(): Promise<{ status: string; positionSec: number; queueIndex: number; track: { title: string; durationSec: number } | null; eq: { preset: string; enabled: boolean } }> } }).flacon.getPlayback())
 
 beforeAll(() => {
   mkdirSync(join(lib, 'Zed', 'Night Album'), { recursive: true })
   tone(join(lib, 'Zed', 'Night Album', '01 Moth.flac'), 220, { title: 'Moth', artist: 'Zed', album: 'Night Album', track: '1', date: '2020' })
   tone(join(lib, 'Zed', 'Night Album', '02 Lantern.flac'), 330, { title: 'Lantern', artist: 'Zed', album: 'Night Album', track: '2', date: '2020' })
+  // One 45 s file + a CUE sheet with three tracks (0 s / 15 s / 30 s): must index as three songs, not one.
+  mkdirSync(join(lib, 'Mixes'), { recursive: true })
+  tone(join(lib, 'Mixes', 'set.flac'), 440, {}, 45)
+  writeFileSync(join(lib, 'Mixes', 'set.cue'), 'PERFORMER "DJ Cue"\nTITLE "Cue Set"\nFILE "set.wav" WAVE\n  TRACK 01 AUDIO\n    TITLE "Cue One"\n    INDEX 01 00:00:00\n  TRACK 02 AUDIO\n    TITLE "Cue Two"\n    INDEX 01 00:15:00\n  TRACK 03 AUDIO\n    TITLE "Cue Three"\n    INDEX 01 00:30:00\n')
 }, 60_000)
 
 describe('app (fresh profile)', () => {
@@ -95,6 +99,34 @@ describe('app (fresh profile)', () => {
     await page.getByRole('row', { name: /Moth/ }).waitFor()
     await page.getByRole('button', { name: /^Time/ }).click()
     expect(await page.getByRole('columnheader', { name: /Time/ }).getAttribute('aria-sort')).toBe('descending')
+  })
+
+  it('indexes a CUE sheet as separate tracks and plays a slice with its own title and length', async () => {
+    await page.getByRole('tab', { name: 'Songs' }).click()
+    await page.getByRole('row', { name: /Cue Two/ }).waitFor({ timeout: 20_000 })
+    expect(await page.getByRole('row', { name: /Cue One/ }).count()).toBe(1)
+    expect(await page.getByRole('row', { name: /Cue Three/ }).count()).toBe(1)
+    expect(await page.getByRole('row', { name: /^\s*\d*\s*set\b/ }).count()).toBe(0) // the whole 45 s file is not also listed
+    await page.getByRole('row', { name: /Cue Two/ }).dblclick()
+    const s = await until(async () => { const x = await pb(page); return x.track?.title === 'Cue Two' && x.status === 'playing' && x })
+    expect(s.track?.durationSec).toBeCloseTo(15, 0)
+    expect(s.positionSec).toBeLessThan(10)
+    // it stops at the slice boundary (2 s after this seek) and hands over to the next queue item instead of playing on into the rest of the 45 s file
+    await page.evaluate(() => (window as unknown as { flacon: { sendPlayback(c: unknown): void } }).flacon.sendPlayback({ type: 'seek', seconds: 13 }))
+    const next = await until(async () => { const x = await pb(page); return x.queueIndex === 1 && x.status === 'playing' && x }, 12_000)
+    expect(next.track?.title).not.toBe('Cue Two')
+  })
+
+  it('survives rapid seeks right after starting a slice (no stuck "loading")', async () => {
+    const send = (c: unknown): Promise<void> => page.evaluate((cmd) => (window as unknown as { flacon: { sendPlayback(c: unknown): void } }).flacon.sendPlayback(cmd), c)
+    for (let i = 0; i < 4; i++) {
+      await page.getByRole('row', { name: /Cue One/ }).dblclick()
+      await until(async () => { const x = await pb(page); return x.status === 'playing' && x })
+      await send({ type: 'seek', seconds: 3 + i })
+      await send({ type: 'seek', seconds: 5 + i })
+      const x = await until(async () => { const y = await pb(page); return y.status === 'playing' && y.positionSec >= 5 && y }, 8_000)
+      expect(x.status).toBe('playing')
+    }
   })
 
   it('browses Artists: index then the artist’s albums', async () => {

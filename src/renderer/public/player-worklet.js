@@ -59,6 +59,7 @@ if (typeof registerProcessor !== 'undefined') {
       this.fadeTotal = FADE_FRAMES(sampleRate)
       this.pauseAfterFade = false
       this.flushAfterFade = false
+      this.flushAt = 0
       this.ended = false
       this.reportAt = 0
       this.port.onmessage = (e) => this.onMessage(e.data)
@@ -79,7 +80,10 @@ if (typeof registerProcessor !== 'undefined') {
           this.pauseAfterFade = true
           break
         case 'flush': // seek or skip: fade out 10 ms, then drop buffered audio
+          // Everything written so far is stale; audio written AFTER this point belongs to the new stream, which
+          // may already be decoding while the 10 ms fade runs, so the flush must not touch it.
           this.pending.length = 0
+          this.flushAt = this.ring.writePos
           if (this.playing) {
             this.startFade(-1)
             this.flushAfterFade = true
@@ -98,6 +102,12 @@ if (typeof registerProcessor !== 'undefined') {
     startFade(dir) {
       this.fade = dir
       this.fadeLeft = this.fadeTotal
+    }
+    /** Drop buffered audio written before `at`, keeping the new stream's audio and track marks (a mark at/after `at`). */
+    flushTo(at) {
+      if (at > this.ring.readPos) this.ring.readPos = at
+      this.marks = this.marks.filter((m) => m.at >= at)
+      this.current = null
     }
     hardFlush() {
       this.ring.flush()
@@ -146,7 +156,7 @@ if (typeof registerProcessor !== 'undefined') {
           this.pauseAfterFade = false
         }
         if (this.flushAfterFade) {
-          this.hardFlush()
+          this.flushTo(this.flushAt)
           this.flushAfterFade = false
           this.startFade(+1)
         }

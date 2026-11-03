@@ -4,6 +4,8 @@ import { isAudioPath } from '@shared/playback'
 
 export interface WalkResult {
   files: string[]
+  /** .cue sheets found next to the audio. */
+  cues: string[]
   /** Folders we were not allowed to read (macOS Full Disk Access / folder prompts). */
   denied: string[]
   /** False when the root itself is gone (drive offline / folder renamed or removed). */
@@ -15,7 +17,8 @@ export interface WalkResult {
  * symlink loops and stops the same file being indexed under two paths.
  */
 export async function walk(root: string, seenDirs = new Set<string>()): Promise<WalkResult> {
-  const out: WalkResult = { files: [], denied: [], rootReachable: true }
+  const out: WalkResult = { files: [], cues: [], denied: [], rootReachable: true }
+  const cues: string[] = []
   try {
     await fs.access(root)
   } catch {
@@ -58,6 +61,7 @@ export async function walk(root: string, seenDirs = new Set<string>()): Promise<
         }
       }
       if (isDir) stack.push(p)
+      else if (isFile && p.toLowerCase().endsWith('.cue')) cues.push(p)
       else if (isFile && isAudioPath(p)) {
         let id = join(real, ent.name)
         if (viaLink) {
@@ -73,5 +77,6 @@ export async function walk(root: string, seenDirs = new Set<string>()): Promise<
     }
   }
   out.files = [...byIdentity.values()].map((v) => v.path).sort()
+  out.cues = cues.sort()
   return out
 }

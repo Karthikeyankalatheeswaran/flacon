@@ -33,6 +33,12 @@ describe('decodeArgs', () => {
     expect(decodeArgs('/m/a.flac', 0, 48000).join(' ')).not.toContain('soxr')
     expect(decodeArgs('/m/a.flac', 0, 48000, true).join(' ')).toContain('resampler=soxr')
   })
+  it('limits duration for CUE slices, after the seek', () => {
+    const a = decodeArgs('/m/a.flac', 100, 48000, false, 61.5)
+    expect(a[a.indexOf('-t') + 1]).toBe('61.500')
+    expect(a.indexOf('-ss')).toBeLessThan(a.indexOf('-i'))
+    expect(decodeArgs('/m/a.flac', 0, 48000)).not.toContain('-t')
+  })
   it('titles from filename without extension', () => {
     expect(titleFromPath('C:\\Music\\01 Intro.flac')).toBe('01 Intro')
   })

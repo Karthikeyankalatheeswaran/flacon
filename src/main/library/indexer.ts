@@ -1,9 +1,10 @@
 import { createHash } from 'node:crypto'
 import { existsSync, promises as fs } from 'node:fs'
-import { dirname, extname, join, sep } from 'node:path'
+import { basename, dirname, extname, join, sep } from 'node:path'
 import { parseFile } from 'music-metadata'
 import { betterQuality, albumKey, cleanString, hueTint, inferQuality, normalizeTags, parseNumberOf, splitMulti } from '@shared/tags'
 import type { Quality } from '@shared/library'
+import { cueVirtualPath, decodeCue, parseCue, trackEnds } from '@shared/cue'
 import type { Db } from './db'
 import { walk } from './walk'
 
@@ -14,6 +15,8 @@ const ART_EXT = ['jpg', 'jpeg', 'png', 'webp']
 export interface Indexer {
   scanFolder(root: string, onProgress: (done: number, total: number) => void): Promise<{ denied: string[]; reachable: boolean }>
   indexFile(path: string): Promise<void>
+  /** Index every track of a .cue sheet. Returns the audio files it covers and the virtual paths it produced. */
+  indexCue(cuePath: string, audio: Set<string>): Promise<{ covered: string[]; paths: string[] }>
   removeFile(path: string): void
   /** Drop every track under `root` in one transaction (a library folder was removed). */
   removeUnder(root: string): void
@@ -48,6 +51,8 @@ export function createIndexer(db: Db, artDir: string): Indexer {
     setAggregate: db.prepare('update albums set minutes=@minutes, track_count=@n, quality=@quality, ceiling=@ceiling, offline=@offline where id=@id'),
     albumArt: db.prepare('update albums set art = coalesce(art, ?) where id = ?'),
     delEmptyAlbums: db.prepare('delete from albums where id not in (select distinct album_id from tracks)'),
+    setCue: db.prepare('update tracks set cue_start = ?, cue_end = ? where id = ?'),
+    cueCovers: db.prepare("select 1 from tracks where path like ? escape '\\' and cue_start is not null limit 1"),
     underRoot: db.prepare("select id, path, album_id as albumId from tracks where path like ? escape '\\'")
   }
 
@@ -85,7 +90,93 @@ export function createIndexer(db: Db, artDir: string): Indexer {
     q.setAggregate.run({ id, n: a.n, minutes: Math.round((a.dur ?? 0) / 60), quality, ceiling: (a.rate ?? 0) / 2000, offline: a.present ? 0 : 1 })
   }
 
+  /** True when an audio file is the source of CUE-sliced tracks (it must not also be listed as one long track). */
+  function coveredByCue(path: string): boolean {
+    const esc = (v: string): string => v.replace(/[\\%_]/g, '\\$&')
+    const ext = extname(path)
+    return !!q.cueCovers.get(esc(path.slice(0, path.length - ext.length)) + '#cue%' + esc(ext))
+  }
+
+  /** Match a FILE name from a sheet to a real audio file beside it: only the base name is honoured (never ../), and a wrong extension (".wav" for a ".flac") is forgiven. */
+  function resolveCueFile(dir: string, name: string, audio: Set<string>): string | null {
+    const base = basename(name.replace(/\\/g, '/'))
+    const exact = join(dir, base)
+    if (audio.has(exact)) return exact
+    const stem = base.slice(0, base.length - extname(base).length).toLowerCase()
+    for (const a of audio) if (dirname(a) === dir && basename(a).slice(0, basename(a).length - extname(a).length).toLowerCase() === stem) return a
+    return null
+  }
+
+  async function indexCue(cuePath: string, audio: Set<string>): Promise<{ covered: string[]; paths: string[] }> {
+    const none = { covered: [], paths: [] }
+    const cueStat = await fs.stat(cuePath)
+    if (cueStat.size > 2 * 1024 * 1024) return none // not a real sheet
+    const sheet = parseCue(decodeCue(await fs.readFile(cuePath)))
+    if (!sheet.tracks.length) return none
+    const dir = dirname(cuePath)
+    const files = new Map<string, string | null>()
+    for (const t of sheet.tracks) if (!files.has(t.file)) files.set(t.file, resolveCueFile(dir, t.file, audio))
+    const metas = new Map<string, Awaited<ReturnType<typeof parseFile>>>()
+    const sizes = new Map<string, { size: number; mtime: number }>()
+    for (const real of new Set([...files.values()].filter((v): v is string => !!v))) {
+      try {
+        metas.set(real, await parseFile(real, { duration: true, skipPostHeaders: true }))
+        const st = await fs.stat(real)
+        sizes.set(real, { size: st.size, mtime: Math.floor(Math.max(st.mtimeMs, cueStat.mtimeMs)) })
+      } catch {
+        /* unreadable audio: its tracks are skipped */
+      }
+    }
+    const usable = sheet.tracks.filter((t) => { const r = files.get(t.file); return r && metas.has(r) })
+    if (!usable.length) return none
+    const ends = trackEnds(usable.map((t) => ({ ...t, file: files.get(t.file)! })), (f) => metas.get(f)?.format.duration ?? 0)
+    const out: string[] = []
+    for (const [i, t] of usable.entries()) {
+      const real = files.get(t.file)!
+      const meta = metas.get(real)!
+      const f = meta.format
+      const c = meta.common
+      const vpath = cueVirtualPath(real, t.number)
+      out.push(vpath)
+      const sz = sizes.get(real)!
+      const existing = q.byPath.get(vpath) as { id: number; size: number; mtime: number; albumId: number } | undefined
+      if (existing && existing.size === sz.size && existing.mtime === sz.mtime) {
+        touched.add(existing.albumId)
+        continue
+      }
+      const albumArtist = cleanString(sheet.performer) || cleanString(t.performer) || 'Unknown artist'
+      const album = cleanString(sheet.title) || cleanString(c.album) || basename(real, extname(real))
+      const artist = cleanString(t.performer) || albumArtist
+      const title = cleanString(t.title) || `Track ${t.number}`
+      const quality = inferQuality({ lossless: !!f.lossless, bitDepth: f.bitsPerSample ?? null, sampleRate: f.sampleRate ?? 44100 })
+      const key = albumKey(albumArtist, album)
+      let artName: string | null = null
+      const pic = c.picture?.[0]
+      if (pic) artName = await saveArt(pic.data, pic.format)
+      if (!artName) artName = await folderArt(dir)
+      const end = ends[i]!
+      db.transaction(() => {
+        const albumId = (q.upsertAlbum.get({ key, title: album, albumArtist, year: sheet.date, tint: hueTint(key), quality, now: Date.now() }) as { id: number }).id
+        const row = { path: vpath, size: sz.size, mtime: sz.mtime, title, artist, albumArtist, album, composer: '', albumId, disc: 0, discTotal: 0, track: t.number, trackTotal: usable.length,
+          year: sheet.date, genre: sheet.genre, duration: Math.max(0, end - t.startSec), sampleRate: f.sampleRate ?? 0, bitDepth: f.bitsPerSample ?? null, channels: f.numberOfChannels ?? 2,
+          codec: cleanString(f.codec) || (f.container ?? ''), lossless: f.lossless ? 1 : 0, quality, now: Date.now() }
+        let id = existing?.id
+        if (id) {
+          q.updateTrack.run({ ...row, id })
+          q.ftsDelete.run(id)
+        } else id = Number(q.insertTrack.run(row).lastInsertRowid)
+        q.setCue.run(t.startSec, end, id)
+        q.ftsInsert.run(id, title, artist, album, '')
+        if (artName) q.albumArt.run(artName, albumId)
+        touched.add(albumId)
+        if (existing && existing.albumId !== albumId) touched.add(existing.albumId)
+      })()
+    }
+    return { covered: [...new Set(usable.map((t) => files.get(t.file)!))], paths: out }
+  }
+
   async function indexFile(path: string): Promise<void> {
+    if (coveredByCue(path)) return
     const st = await fs.stat(path)
     const existing = q.byPath.get(path) as { id: number; size: number; mtime: number; albumId: number } | undefined
     if (existing && existing.size === st.size && existing.mtime === Math.floor(st.mtimeMs)) {
@@ -175,18 +266,32 @@ export function createIndexer(db: Db, artDir: string): Indexer {
       flush()
       return { denied: [], reachable: false }
     }
+    // CUE sheets first: audio they cover is indexed as slices, not as one long track.
+    const audioSet = new Set(w.files)
+    const covered = new Set<string>()
+    const cuePaths = new Set<string>()
+    for (const cue of w.cues) {
+      try {
+        const r = await indexCue(cue, audioSet)
+        r.covered.forEach((f) => covered.add(f))
+        r.paths.forEach((v) => cuePaths.add(v))
+      } catch {
+        /* unreadable sheet: its audio falls back to whole-file tracks */
+      }
+    }
+    const plain = w.files.filter((f) => !covered.has(f))
     let done = 0
-    for (const p of w.files) {
+    for (const p of plain) {
       try {
         await indexFile(p)
       } catch {
         /* file vanished mid-scan or unreadable: skip */
       }
-      onProgress(++done, w.files.length)
+      onProgress(++done, plain.length)
       if (done % 200 === 0) flush() // batch SQLite work; keeps the UI filling in as the scan proceeds
       if (done % 25 === 0) await new Promise((r) => setImmediate(r)) // let the worker answer queries
     }
-    const present = new Set(w.files)
+    const present = new Set([...plain, ...cuePaths])
     for (const k of known) if (!present.has(k.path)) removeFile(k.path)
     flush()
     return { denied: w.denied, reachable: true }
@@ -205,5 +310,5 @@ export function createIndexer(db: Db, artDir: string): Indexer {
     flush()
   }
 
-  return { scanFolder, removeUnder, indexFile: async (p) => { await indexFile(p); flush() }, removeFile }
+  return { scanFolder, removeUnder, indexCue, indexFile: async (p) => { await indexFile(p); flush() }, removeFile }
 }

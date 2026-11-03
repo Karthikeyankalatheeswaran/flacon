@@ -1,12 +1,13 @@
 import type { TrackInfo } from '@shared/playback'
 
 /** Decode to interleaved float32 stereo at the engine's rate, starting at `startSec` (fast input seek). */
-export function decodeArgs(path: string, startSec: number, sampleRate: number, soxr = false): string[] {
+export function decodeArgs(path: string, startSec: number, sampleRate: number, soxr = false, durationSec?: number): string[] {
   const args = ['-hide_banner', '-nostdin', '-loglevel', 'info']
   if (startSec > 0) args.push('-ss', startSec.toFixed(3))
   // `-ac 2` downmixes 5.1+ to stereo. The bundled LGPL build has libsoxr (very high quality); the dev ffmpeg-static falls back to swr's default.
   args.push('-i', path, '-vn', '-sn', '-dn', '-map', '0:a:0', '-f', 'f32le', '-acodec', 'pcm_f32le', '-ac', '2')
   if (soxr) args.push('-af', `aresample=resampler=soxr:precision=28:out_sample_rate=${sampleRate}`)
+  if (durationSec !== undefined) args.push('-t', Math.max(0.001, durationSec).toFixed(3)) // CUE slice: stop at the track's end
   args.push('-ar', String(sampleRate), 'pipe:1')
   return args
 }

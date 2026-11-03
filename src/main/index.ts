@@ -11,7 +11,8 @@ import { AlbumIdSchema, Channels, FolderDirSchema, PlayFolderSchema, SearchQuery
 import type { Album, LibraryProgress, LibraryTrack, SongsPage } from '@shared/library'
 import { defaultEq, sanitizeEq, type EqSettings } from '@shared/eq'
 import { AUDIO_EXTENSIONS, initialPlayback, isAudioPath, type PlaybackState } from '@shared/playback'
-import { createEngineWindow, currentQueue, dispatch, isEngine, resolveFfmpeg, sendToEngine, shutdownEngine } from './engine'
+import { cueRealPath } from '@shared/cue'
+import { createEngineWindow, currentQueue, dispatch, setCueLookup, isEngine, resolveFfmpeg, sendToEngine, shutdownEngine } from './engine'
 import { FetchControlSchema, FetchPickSchema, FetchSearchSchema, FetchSettingsSchema } from '@shared/fetchIpc'
 import { z } from 'zod'
 import { fetchControl, fetchEnqueue, fetchList, fetchSearch, getFetchSettings, setFetchSettings, startFetcher, stopFetcher } from './fetcher/service'
@@ -110,9 +111,9 @@ function saveSession(): void {
 function restoreSession(): void {
   const s = settings.get().session
   if (!s || !s.paths.length) return
-  const paths = s.paths.filter((p) => existsSync(p)) // files on a drive that isn't mounted are simply skipped
+  const paths = s.paths.filter((p) => existsSync(cueRealPath(p))) // files on a drive that isn't mounted are simply skipped
   if (!paths.length) return
-  const lostBefore = s.paths.slice(0, s.index).filter((p) => !existsSync(p)).length
+  const lostBefore = s.paths.slice(0, s.index).filter((p) => !existsSync(cueRealPath(p))).length
   dispatch({ type: 'load', tracks: paths.map((path) => ({ path })), index: Math.max(0, Math.min(paths.length - 1, s.index - lostBefore)), paused: true, startSec: s.positionSec })
 }
 
@@ -232,6 +233,7 @@ function registerIpc(): void {
     if (patch.islandEdge !== undefined && islandWin && !islandWin.isDestroyed()) placeIsland(islandWin, patch.islandEdge)
     return settingsInfo()
   })
+  setCueLookup((paths) => libraryCall({ op: 'cueRefs', paths }))
   ipcMain.handle(Channels.libraryFolder, (_e, raw: unknown) => libraryCall<FolderListing>({ op: 'folder', dir: FolderDirSchema.parse(raw) }))
   ipcMain.handle(Channels.libraryPlayFolder, async (_e, raw: unknown) => {
     const { dir, index } = PlayFolderSchema.parse(raw)

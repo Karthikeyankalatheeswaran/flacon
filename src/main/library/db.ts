@@ -26,6 +26,11 @@ const MIGRATIONS: string[] = [
   create index tracks_album on tracks(album_id, disc, track);
   create index tracks_match on tracks(size, title, album);
   create virtual table tracks_fts using fts5(title, artist, album, composer, tokenize = 'unicode61 remove_diacritics 2');
+  `,
+  // v2: CUE sheets — a track may be a slice [cue_start, cue_end) of an audio file (path is then a virtual path, see shared/cue.ts)
+  `
+  alter table tracks add column cue_start real;
+  alter table tracks add column cue_end real;
   `
 ]
 

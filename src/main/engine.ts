@@ -3,7 +3,8 @@ import { join } from 'node:path'
 import { app, BrowserWindow, MessageChannelMain, utilityProcess, type UtilityProcess } from 'electron'
 import ffmpegPath from 'ffmpeg-static'
 import { Channels } from '@shared/ipc'
-import { PlaybackCommandSchema, type PlaybackCommand } from '@shared/playback'
+import { cueRealPath, isCuePath } from '@shared/cue'
+import { PlaybackCommandSchema, type PlaybackCommand, type TrackRef } from '@shared/playback'
 import { lockDown } from './security'
 
 let win: BrowserWindow | null = null
@@ -95,11 +96,33 @@ let lastQueue: string[] = []
 /** Paths of the most recently loaded queue (saved with the session at quit). */
 export const currentQueue = (): string[] => lastQueue
 
+/** Looks up start/end/title for CUE virtual paths (the library DB owns them). */
+type CueLookup = (paths: string[]) => Promise<Array<{ path: string; title: string; startSec: number; endSec: number }>>
+let cueLookup: CueLookup | null = null
+export const setCueLookup = (f: CueLookup): void => { cueLookup = f }
+
+async function resolveCues(tracks: TrackRef[]): Promise<TrackRef[]> {
+  const wanted = tracks.filter((t) => !t.cue && isCuePath(t.path)).map((t) => t.path)
+  if (!wanted.length || !cueLookup) return tracks
+  const found = new Map((await cueLookup(wanted)).map((r) => [r.path, r]))
+  // A virtual path with no row (sheet deleted since) can't be played as a slice: drop it rather than play the whole file.
+  return tracks.flatMap((t): TrackRef[] => {
+    if (t.cue || !isCuePath(t.path)) return [t]
+    const r = found.get(t.path)
+    return r ? [{ path: t.path, file: cueRealPath(t.path), title: r.title, cue: { startSec: r.startSec, endSec: r.endSec } }] : []
+  })
+}
+
 export function dispatch(raw: unknown): void {
   const parsed = PlaybackCommandSchema.safeParse(raw)
   if (!parsed.success) return
-  if (parsed.data.type === 'load') lastQueue = parsed.data.tracks.map((t) => t.path)
-  sendToEngine(parsed.data)
+  const cmd = parsed.data
+  if (cmd.type !== 'load') return sendToEngine(cmd)
+  lastQueue = cmd.tracks.map((t) => t.path)
+  if (!cmd.tracks.some((t) => isCuePath(t.path))) return sendToEngine(cmd)
+  void resolveCues(cmd.tracks).then((tracks) => {
+    if (tracks.length) sendToEngine({ ...cmd, tracks, index: Math.min(cmd.index, tracks.length - 1) })
+  })
 }
 
 export function shutdownEngine(): void {

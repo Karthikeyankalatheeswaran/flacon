@@ -8,7 +8,15 @@ export function isAudioPath(p: string): boolean {
   return (AUDIO_EXTENSIONS as readonly string[]).includes(ext)
 }
 
-export const TrackRefSchema = z.object({ path: z.string().min(1).max(4096).refine(isAudioPath, 'unsupported audio file') })
+export const CueSliceSchema = z.object({ startSec: z.number().min(0).max(36 * 3600), endSec: z.number().min(0).max(36 * 3600) })
+export const TrackRefSchema = z.object({
+  path: z.string().min(1).max(4096).refine(isAudioPath, 'unsupported audio file'),
+  /** Display title for slices of a file (CUE tracks). */
+  title: z.string().max(512).optional(),
+  /** Play only [startSec, endSec) of the file (CUE tracks). `path` stays the virtual path; `file` is what is decoded. */
+  cue: CueSliceSchema.optional(),
+  file: z.string().min(1).max(4096).refine(isAudioPath, 'unsupported audio file').optional()
+})
 export type TrackRef = z.infer<typeof TrackRefSchema>
 
 /** Commands UI → main → engine. Validated in main before forwarding. */

@@ -99,10 +99,14 @@ function startWatching(): void {
       post({ event: 'changed' })
     }, 500)
   }
-  watcher = chokidar.watch(roots, { ignoreInitial: true, followSymlinks: false, /* symlink loops would re-add the library under new paths */ awaitWriteFinish: { stabilityThreshold: 600, pollInterval: 100 }, ignored: (p, s) => !!s?.isFile() && !isAudioPath(p) })
-  watcher.on('add', (p) => (queue.set(p, 'upsert'), kick()))
-  watcher.on('change', (p) => (queue.set(p, 'upsert'), kick()))
-  watcher.on('unlink', (p) => (queue.set(p, 'remove'), kick()))
+  watcher = chokidar.watch(roots, { ignoreInitial: true, followSymlinks: false, /* symlink loops would re-add the library under new paths */ awaitWriteFinish: { stabilityThreshold: 600, pollInterval: 100 }, ignored: (p, s) => !!s?.isFile() && !isAudioPath(p) && !p.toLowerCase().endsWith('.cue') })
+  // A sheet appearing, changing or vanishing changes how its audio is sliced: rescan rather than patch.
+  const isCue = (p: string): boolean => p.toLowerCase().endsWith('.cue')
+  let rescan: NodeJS.Timeout | undefined
+  const rescanSoon = (): void => { clearTimeout(rescan); rescan = setTimeout(() => void scanAll(), 1500) }
+  watcher.on('add', (p) => (isCue(p) ? rescanSoon() : (queue.set(p, 'upsert'), kick())))
+  watcher.on('change', (p) => (isCue(p) ? rescanSoon() : (queue.set(p, 'upsert'), kick())))
+  watcher.on('unlink', (p) => (isCue(p) ? rescanSoon() : (queue.set(p, 'remove'), kick())))
   watcher.on('error', () => undefined) // permission errors on subfolders must not kill the worker
 }
 
@@ -147,6 +151,8 @@ async function handle(req: LibraryRequest): Promise<unknown> {
       return db.prepare('select id, path, title, artist, album, disc, track, duration as durationSec from tracks where album_id = ? and missing = 0 order by disc, track, path').all(req.albumId) as LibraryTrack[]
     case 'songs': return songs(req.query)
     case 'folder': return folderListing(req.dir)
+    case 'cueRefs':
+      return db.prepare('select path, title, cue_start as startSec, cue_end as endSec from tracks where cue_start is not null and path in (select value from json_each(?))').all(JSON.stringify(req.paths))
     case 'search': {
       const m = ftsQuery(req.query)
       if (!m) return []
