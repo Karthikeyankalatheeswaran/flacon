@@ -16,7 +16,7 @@
   --tint: #13303a;
   --tint-ink: #13303a; /* tint as text/line on paper */
 
-  --font-ui: Archivo, system-ui, -apple-system, 'Segoe UI Variable', sans-serif;
+  --font-ui: 'Archivo Variable', Archivo, system-ui, -apple-system, 'Segoe UI Variable', sans-serif;
   --radius-sleeve: 2px;
   --radius-control: 6px;
   --radius-popover: 8px;

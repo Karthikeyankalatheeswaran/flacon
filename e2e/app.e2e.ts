@@ -66,6 +66,11 @@ describe('app (fresh profile)', () => {
     expect(await page.title()).toBe('Flacon')
   })
 
+  it('loads the bundled Archivo font under the strict CSP (no remote fonts)', async () => {
+    const loaded = await until(async () => page.evaluate(async () => { await document.fonts.ready; return [...document.fonts].some((f) => f.family.includes('Archivo') && f.status === 'loaded') }))
+    expect(loaded).toBe(true)
+  })
+
   it('shows the first-run welcome sheet and lets it be skipped with Escape', async () => {
     await page.getByRole('dialog', { name: /welcome/i }).waitFor()
     await page.keyboard.press('Escape')
