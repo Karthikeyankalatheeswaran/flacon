@@ -15,6 +15,7 @@
     "package:dir": "electron-vite build && electron-builder --dir --arm64 -c.mac.identity=null && codesign --force --deep -s - dist/mac-arm64/Flacon.app",
     "package": "electron-vite build && node scripts/check-ffmpeg-license.mjs && electron-builder",
     "check:ffmpeg": "node scripts/check-ffmpeg-license.mjs",
+    "check:ffmpeg:all": "node scripts/check-ffmpeg-license.mjs --all",
     "test:e2e": "electron-vite build && vitest run --config vitest.e2e.config.ts"
   },
   "dependencies": {

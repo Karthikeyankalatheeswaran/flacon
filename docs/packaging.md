@@ -17,8 +17,7 @@ The app bundles its own decode-only **LGPL-2.1** ffmpeg (no `--enable-gpl`/`--en
 `scripts/build-ffmpeg.sh` into `vendor/ffmpeg/<platform>-<arch>/` (git-ignored) and shipped via `extraResources` as `Resources/ffmpeg/`.
 libsoxr (LGPL) is dynamically linked (`libsoxr.0.dylib` beside the binary) so it can be replaced. Source is unmodified ffmpeg from ffmpeg.org;
 ship the licence texts and a source offer in the release notes. `npm run check:ffmpeg` is the release gate and fails if the bundled binary is
-missing, GPL, nonfree or lacks soxr. Only macOS arm64 has been built so far: x64 needs the script run on an Intel Mac (or cross-built) and Windows
-needs the same configure flags under MSYS2 into `vendor/ffmpeg/win32-<arch>/`. At runtime the app prefers the bundled build, then falls back to the GPL
+missing, GPL, nonfree or lacks soxr. All four targets (darwin-arm64, darwin-x64, win32-x64, win32-arm64) are built from a single macOS arm64 machine: `scripts/build-ffmpeg.sh` (native arm64) and `scripts/build-ffmpeg-cross.sh <target>` (x64 via `clang -arch`, Windows via the llvm-mingw toolchain; libsoxr built from source as a shared lib). `npm run check:ffmpeg:all` gates every build; for binaries that cannot run on the build host it reads the configure string ffmpeg embeds in itself. Executed-and-tested status: darwin-arm64 (natively), darwin-x64 (under Rosetta, incl. a soxr decode); the Windows binaries are verified only statically (PE type, imports = system DLLs + libsoxr.dll, licence flags) and have never been run. At runtime the app prefers the bundled build, then falls back to the GPL
 `ffmpeg-static` for dev only.
 
 ## Updates
