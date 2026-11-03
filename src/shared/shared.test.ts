@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { contrast, guardTint } from './tint'
-import { initialIsland, islandReducer } from './islandMachine'
+import { initialIsland, islandReducer, restFor } from './islandMachine'
 import { timecode } from './library'
 
 describe('tint guard', () => {
@@ -8,6 +8,30 @@ describe('tint guard', () => {
     expect(guardTint('#13303A')).toBe('#13303a')
     const g = guardTint('#E8622C')
     expect(contrast(g, '#EDEDE8')).toBeGreaterThanOrEqual(4.5)
+  })
+})
+
+describe('island machine (M4)', () => {
+  it('rests as a dot with no track and returns there after an activity', () => {
+    let m = islandReducer(initialIsland, { type: 'rest', rest: restFor(false) })
+    expect(m.state).toBe('dot')
+    m = islandReducer(m, { type: 'activity' })
+    expect(m.state).toBe('activity')
+    expect(islandReducer(m, { type: 'dismiss' }).state).toBe('dot')
+  })
+  it('a new rest never interrupts an error or activity but applies afterwards', () => {
+    let m = islandReducer(initialIsland, { type: 'error' })
+    m = islandReducer(m, { type: 'rest', rest: 'dot' })
+    expect(m.state).toBe('error')
+    expect(islandReducer(m, { type: 'dismiss' }).state).toBe('dot')
+  })
+  it('expanded collapses on pointer-leave; hidden stays hidden', () => {
+    let m = islandReducer(initialIsland, { type: 'click' })
+    expect(m.state).toBe('expanded')
+    expect(islandReducer(m, { type: 'pointer-leave' }).state).toBe('compact')
+    m = islandReducer(initialIsland, { type: 'hide' })
+    expect(islandReducer(m, { type: 'rest', rest: 'compact' }).state).toBe('hidden')
+    expect(islandReducer(m, { type: 'error' }).state).toBe('hidden')
   })
 })
 

@@ -63,3 +63,12 @@ The Songs tab (Library → Songs) is a virtualized table: 48px rows, windowed 20
 
 Testing with a real file: symlink it into a folder and launch with
 `FLACON_LOG_STATE=1 FLACON_LIBRARY_FOLDER=/tmp/flacon-real npx electron out/main/index.js`.
+
+## M4 — Island
+
+All island states are driven by one pure reducer (`src/shared/islandMachine.ts`, tested): `dot` (nothing loaded),
+`compact`, `hover` (150 ms intent; prev/play/next), `expanded` (scrubber; collapses 500 ms after the pointer leaves),
+`activity` (new track, 2.5 s) and `error` (engine toast/error, 5 s, `aria-live=assertive`). Activities never interrupt an
+expanded island. The pill tint is derived per track and contrast-guarded. Placement (`islandPlacement.ts`) centres on the
+display under the cursor, straddles the notch on notched Macs, sits above the taskbar when docked bottom on Windows, and is
+re-applied on display changes (tested). Vitest now has a `vitest.config.ts` with the `@shared` alias.

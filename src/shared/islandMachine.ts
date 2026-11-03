@@ -5,6 +5,9 @@ import type { IslandStateName } from './ipc'
 
 export const HOVER_INTENT_MS = 150
 export const ACTIVITY_DWELL_MS = 2500
+export const ERROR_DWELL_MS = 5000
+/** Grace before an expanded island collapses after the pointer leaves it. */
+export const COLLAPSE_GRACE_MS = 500
 
 export interface IslandModel {
   state: IslandStateName
@@ -21,8 +24,14 @@ export type IslandEvent =
   | { type: 'activity' }
   | { type: 'error' }
   | { type: 'dismiss' }
+  | { type: 'rest'; rest: IslandModel['rest'] }
   | { type: 'hide' }
   | { type: 'show' }
+
+/** Resting presentation for a playback status: idle with no track shrinks to the dot. */
+export function restFor(hasTrack: boolean): IslandModel['rest'] {
+  return hasTrack ? 'compact' : 'dot'
+}
 
 export const initialIsland: IslandModel = { state: 'compact', rest: 'compact' }
 
@@ -35,9 +44,13 @@ export function islandReducer(m: IslandModel, e: IslandEvent): IslandModel {
     case 'pointer-enter':
       return m.state === 'compact' || m.state === 'dot' ? { ...m, state: 'hover' } : m
     case 'pointer-leave':
-      return m.state === 'hover' ? { ...m, state: m.rest } : m
+      return m.state === 'hover' || m.state === 'expanded' ? { ...m, state: m.rest } : m
+    case 'rest':
+      // Nothing to play → a dot; a loaded track → the compact pill. Never disturb a visible state.
+      if (m.state === 'hidden') return m
+      return m.state === 'compact' || m.state === 'dot' ? { state: e.rest, rest: e.rest } : { ...m, rest: e.rest }
     case 'click':
-      if (m.state === 'hover' || m.state === 'compact') return { ...m, state: 'expanded' }
+      if (m.state === 'hover' || m.state === 'compact' || m.state === 'dot') return { ...m, state: 'expanded' }
       return m
     case 'escape':
     case 'blur':
