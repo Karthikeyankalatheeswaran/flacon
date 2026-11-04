@@ -17,7 +17,7 @@ afterPack: build/afterPack.cjs
 # Native/binary assets must live outside the asar: the OS loads .node files and spawns ffmpeg from real paths.
 asarUnpack:
   - "**/*.node"
-# better-sqlite3 is rebuilt for the Electron ABI by `npm run rebuild:native`; do not rebuild again at package time.
+# better-sqlite3 >= 13 ships N-API prebuilds for all platforms (ABI-stable), so nothing is rebuilt at package time.
 npmRebuild: false
 extraMetadata:
   main: out/main/index.js
@@ -32,6 +32,8 @@ fileAssociations:
   - { ext: dsf, name: DSD audio, role: Viewer }
 mac:
   icon: build/icon.icns
+  files:
+    - "!**/better-sqlite3/prebuilds/{linux,win32}*.node"
   artifactName: "${productName}-${version}-mac-${arch}.${ext}"
   extraResources:
     - { from: "vendor/ffmpeg/darwin-${arch}", to: ffmpeg }
@@ -50,6 +52,8 @@ mac:
   # identity / notarize are supplied by CI (-c.mac.identity, -c.mac.notarize=true); unsigned local builds just skip them.
 win:
   icon: build/icon.ico
+  files:
+    - "!**/better-sqlite3/prebuilds/{linux,darwin}*.node"
   # Editing the exe (icon/version) normally needs wine off Windows; build/afterPack.cjs does it in pure JS instead.
   signAndEditExecutable: false
   extraResources:

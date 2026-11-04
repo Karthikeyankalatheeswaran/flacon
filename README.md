@@ -50,7 +50,7 @@ Known gaps / decisions: `ffmpeg-static` is a GPL/nonfree build without soxr — 
 - Search: FTS5, `unicode61 remove_diacritics 2`, user input tokenised and quoted (no syntax injection), last token prefix-matched, latest-wins in the UI.
 - UI: virtualised album grid (TanStack Virtual), skeletons, empty/searching/no-results states, double-click or Enter plays an album.
 
-`npm run rebuild:native` fetches the Electron-ABI binary of better-sqlite3 (pinned to 11.x: 13.x prebuilds segfault on Electron 33). `FLACON_LIBRARY_FOLDER=/path` seeds a folder for smoke tests.
+Electron 45 with better-sqlite3 13.x, which bundles N-API prebuilds for every platform, so no native rebuild is needed (`npm run rebuild:native` only verifies the prebuild exists). `FLACON_LIBRARY_FOLDER=/path` seeds a folder for smoke tests.
 
 Not yet: CUE sheets, WebP thumbnails (64/256/600) and dominant-colour extraction (tint is a deterministic hash of the album for now), measured spectral ceiling (shown value is the nominal Nyquist), Songs/Artists/Folders views, macOS security-scoped bookmarks, persisted folder list UI, rate-limited rescans on network drives, automated DB tests (the Electron-ABI binary can't load in vitest; DB behaviour is covered by the Electron smoke test).
 
@@ -197,4 +197,4 @@ Running the fetcher against archive.org for the first time (`E2E_NET=1 npx vites
 
 ### Security (Shannon-style review)
 Entry points and trust boundaries were mapped and every finding was proven by a test ("no exploit, no report"). Fixed: SSRF bypasses in `isPrivateHost` (trailing-dot hosts, IPv4-mapped IPv6, `.lan`, bare names), ffmpeg protocol whitelisting for all inputs, IPC sender checks, and Electron fuses (RunAsNode, NODE_OPTIONS, inspect off). See `SECURITY.md` and `docs/security-review.md`.
-Open: Electron 33 is end-of-life (needs a major upgrade plus a better-sqlite3 rebuild), a DNS-rebinding race window in fetch, unsigned builds, Windows build not yet run.
+Open: a DNS-rebinding race window in fetch, unsigned builds, Windows build not yet run.

@@ -27,8 +27,8 @@ macOS auto-update requires a signed + notarized build.
 
 ## Building every installer locally
 `scripts/package-all.sh [mac-arm64 mac-x64 win-x64 win-arm64]` (default: all four) builds all ffmpeg binaries it needs
-(`scripts/build-ffmpeg*.sh`), runs `check:ffmpeg:all`, swaps the Electron-ABI better-sqlite3 per target
-(`scripts/rebuild-native.mjs --platform --arch`), packages with electron-builder, and fails if `ffmpeg-static` (GPL) is inside any
+(`scripts/build-ffmpeg*.sh`), runs `check:ffmpeg:all`, checks the (N-API, ABI-stable) better-sqlite3 prebuild per target
+(`scripts/rebuild-native.mjs --platform --arch`; better-sqlite3 >= 13 bundles prebuilds for every platform), packages with electron-builder, and fails if `ffmpeg-static` (GPL) is inside any
 app.asar or the bundled ffmpeg is missing. Output in `dist/`:
 `Flacon-<v>-mac-{arm64,x64}.{dmg,zip}`, `Flacon-<v>-win-{x64,arm64}-setup.exe`. Windows icon/version resources are edited in pure JS
 (`resedit`, `build/afterPack.cjs`) so no wine is needed. Without signing credentials macOS builds are ad-hoc signed

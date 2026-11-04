@@ -121,7 +121,7 @@ function makeMainWindow(hidden: boolean): BrowserWindow {
 function applyLoginItem(enabled: boolean): void {
   // Registering the dev binary (electron.app) as a login item would be wrong: packaged builds only.
   if (!app.isPackaged) return
-  app.setLoginItemSettings({ openAtLogin: enabled, openAsHidden: true, args: enabled ? ['--hidden'] : [] })
+  app.setLoginItemSettings({ openAtLogin: enabled, args: enabled ? ['--hidden'] : [] })
 }
 
 function settingsInfo(): AppSettingsInfo {

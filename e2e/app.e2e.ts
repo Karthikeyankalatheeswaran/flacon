@@ -172,7 +172,8 @@ describe('app (fresh profile)', () => {
   it('focuses search with Ctrl+K', async () => {
     await page.getByRole('button', { name: 'Library', exact: true }).first().click()
     await page.keyboard.press('Control+k')
-    expect(await page.evaluate(() => (document.activeElement as HTMLInputElement | null)?.type)).toBe('search')
+    // Focus arrives via the native-menu accelerator -> IPC (async), so poll rather than read once.
+    await until(async () => (await page.evaluate(() => (document.activeElement as HTMLInputElement | null)?.type)) === 'search')
   })
 
   it('rejects an insecure link on the Fetch page with a clear message (no network needed)', async () => {

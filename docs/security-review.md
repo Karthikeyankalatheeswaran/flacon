@@ -28,7 +28,7 @@ Windows: `sandbox: true`, `contextIsolation: true`, `nodeIntegration: false`; na
 | F4 | Dependency: `music-metadata` → `file-type` | Moderate | DoS on malformed ASF files and ZIP-based containers while scanning an untrusted library (advisories GHSA-5v7r-6r5c-r473, GHSA-j47w-4g3g-c36v). | `npm audit --omit=dev` | **Fixed**: music-metadata 11.16.1 (published 2026-09-24, older than the 7-day rule) |
 | F5 | Dependency: `zod` 3 | High (advisory) | Memory exhaustion validating oversized constrained collections (GHSA-mrhx-c7xc-m3w5) on IPC payloads. | `npm audit --omit=dev` | **Fixed**: zod 4.6.7 (2026-10-12); typecheck and all tests pass unchanged |
 | F6 | Hardening | Low | Electron fuses were at their defaults (`RunAsNode`, `NODE_OPTIONS`, `--inspect` enabled; app code loadable from a folder). | `build/afterPack.cjs` | **Fixed** for packaged builds: those fuses are off and the app loads only from `app.asar` |
-| F7 | Dependency: Electron 33 | High (advisories) | Electron 33 is end-of-life. The advisories (ASAR integrity bypass, service-worker IPC spoofing, several use-after-free, `moveToApplicationsFolder` / `setAsDefaultProtocolClient` injection, …) are fixed only in newer majors. Flacon does not call the affected APIs (no service workers, no offscreen windows, no protocol client, no remote content), but memory-safety bugs in Chromium are not something to wait on. | `npm audit` | **Open**: needs a major Electron upgrade with `better-sqlite3` rebuilt and a full re-test. Recommended next release |
+| F7 | Dependency: Electron 33 (now 45) | High (advisories) | Electron 33 is end-of-life. The advisories (ASAR integrity bypass, service-worker IPC spoofing, several use-after-free, `moveToApplicationsFolder` / `setAsDefaultProtocolClient` injection, …) are fixed only in newer majors. Flacon does not call the affected APIs (no service workers, no offscreen windows, no protocol client, no remote content), but memory-safety bugs in Chromium are not something to wait on. | `npm audit` | **Fixed**: upgraded to Electron 45.2.2 (Chromium/Node current, supported) with `better-sqlite3` 13.0.3 (N-API prebuilds, no per-ABI rebuild). `npm audit` reports no Electron advisories; remaining findings are dev-only tooling (vite/vitest). Re-tested: typecheck, 307 unit tests, 44 e2e, packaged mac-arm64 launch with fuses applied. Windows build/launch not run here |
 | F8 | Dependency: Vitest / Vite (dev only) | Moderate | Dev-server advisories. Not shipped; the test runner never listens on a network port. | `npm audit` | Accepted (dev only) |
 
 ### Probed and found sound (with evidence)
@@ -51,7 +51,7 @@ Windows: `sandbox: true`, `contextIsolation: true`, `nodeIntegration: false`; na
 - The user can add any folder to the library (it is their computer). A compromised renderer could add `/`; F3 makes that require a compromised *Flacon page*, not just any web content.
 - Builds are unsigned. macOS users must approve the first launch; Windows will show SmartScreen. Signing and notarisation need the user's certificates.
 - Windows builds are produced but have never been run.
-- Chromium / Electron memory-safety bugs (F7) until the Electron upgrade.
+- Chromium / Electron memory-safety bugs remain possible in any release; stay on a supported Electron major (F7: on 45 as of this release; the support window is roughly 8 months per major).
 
 ## 4. Re-running the evidence
 
