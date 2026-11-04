@@ -35,6 +35,7 @@ export const AppSettingsSchema = z.object({
   updateChecks: z.boolean(),
   islandEdge: z.enum(['top', 'bottom']),
   islandAlign: z.enum(['left', 'center', 'right']),
+  outputDevice: z.string().max(256),
   onboarded: z.boolean(),
   islandEnabled: z.boolean(),
   /** When the island shows: always, only while something is loaded, or never idle. */
@@ -44,7 +45,9 @@ export const AppSettingsSchema = z.object({
   islandBadge: z.boolean(),
   replayGain: z.enum(['off', 'track']),
   crossfade: z.number().int().min(0).max(10),
-  showLyrics: z.boolean()
+  showLyrics: z.boolean(),
+  lyricsOnline: z.boolean(),
+  shortcuts: z.record(z.string().max(40), z.string().max(40))
 })
 export type AppSettings = z.infer<typeof AppSettingsSchema>
 /** What the settings page needs beyond the editable values. */
@@ -109,8 +112,19 @@ export interface FlaconBridge extends FetchBridge {
   onMenuAction(cb: (action: string) => void): () => void
   /** Native file dialogs for playlist import (M3U/M3U8) and export. */
   playlistIo(req: { op: 'import' } | { op: 'export'; id: number }): Promise<{ ok: boolean; message: string }>
+  /** Spectrum bars for the visualizer: subscribe while it is on screen (main only runs the analyser while somebody listens). */
+  vizSubscribe(on: boolean): void
+  onViz(cb: (bars: Uint8Array) => void): () => void
+  /** "Report a problem": build the redacted report text, copy it, or save it to a file. Nothing is sent anywhere. */
+  report(req: { op: 'get' | 'copy' | 'save'; note: string }): Promise<{ ok: boolean; message: string; text: string }>
+  /** Renderer errors go to the local log. */
+  logError(message: string): void
+  /** Mini player window controls (only the mini window itself may use these). */
+  mini(op: 'close' | 'expand' | 'pin' | 'unpin'): void
   /** Show a file in Finder / Explorer. */
   reveal(path: string): void
+  /** Ask to move extra copies of duplicate songs to the Trash (main re-checks and confirms natively). */
+  trashDuplicates(paths: string[]): Promise<{ trashed: number; message: string }>
 }
 
 /** What the queue panel shows: slim rows, play order. */
@@ -130,9 +144,11 @@ export const RendererLibraryRequestSchema = z.discriminatedUnion('op', [
   z.object({ op: z.literal('playlistRemove'), id: Id, positions: z.array(z.number().int().min(0).max(100_000)).max(5000) }),
   z.object({ op: z.literal('playlistMove'), id: Id, from: z.number().int().min(0).max(100_000), to: z.number().int().min(0).max(100_000) }),
   z.object({ op: z.literal('lyrics'), path: z.string().min(1).max(4096) }),
+  z.object({ op: z.literal('lyricsOnline'), path: z.string().min(1).max(4096) }),
   z.object({ op: z.literal('home') }),
   z.object({ op: z.literal('stats') }),
   z.object({ op: z.literal('analysisProgress') }),
+  z.object({ op: z.literal('duplicates') }),
   z.object({ op: z.literal('trackMetas'), paths: Paths })
 ])
 export type RendererLibraryRequest = z.infer<typeof RendererLibraryRequestSchema>
@@ -165,6 +181,8 @@ export interface EngineBridge {
   emitState(s: PlaybackState): void
   /** Queue contents (play order) whenever they change. */
   emitQueue(paths: string[], index: number): void
+  /** Spectrum bars (VIZ_BARS bytes) while the visualizer is on. */
+  emitViz(bars: Uint8Array): void
 }
 
 export const SongsQuerySchema = z.object({

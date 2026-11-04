@@ -1,3 +1,4 @@
+import { inputArgs } from '../ffmpegSafe'
 import { spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { open } from 'node:fs/promises'
@@ -40,7 +41,7 @@ async function readHead(path: string): Promise<Uint8Array> {
 
 async function pcmSlice(ffmpeg: string, path: string, startSec: number, seconds: number, fmt: 'f32le' | 's32le', channels: 1 | 2): Promise<Buffer> {
   const chunks: Buffer[] = []
-  await run(ffmpeg, ['-v', 'error', '-ss', String(startSec), '-i', path, '-t', String(seconds), '-map', '0:a:0', '-ac', String(channels), '-f', fmt, '-'], (b) => chunks.push(b))
+  await run(ffmpeg, ['-v', 'error', '-ss', String(startSec), ...inputArgs(path), '-t', String(seconds), '-map', '0:a:0', '-ac', String(channels), '-f', fmt, '-'], (b) => chunks.push(b))
   return Buffer.concat(chunks)
 }
 
@@ -53,7 +54,7 @@ export async function verifyFlac(path: string, ffmpeg: string): Promise<VerifyRe
   // Decode everything once; for 16/24-bit hash the PCM exactly as FLAC defines it (little-endian, native width).
   const hashable = info.bitsPerSample === 16 || info.bitsPerSample === 24
   const hash = createHash('md5')
-  const out = await run(ffmpeg, ['-v', 'error', '-i', path, '-map', '0:a:0', '-f', hashable ? (info.bitsPerSample === 16 ? 's16le' : 's24le') : 'null', '-'], (b) => { if (hashable) hash.update(b) })
+  const out = await run(ffmpeg, ['-v', 'error', ...inputArgs(path), '-map', '0:a:0', '-f', hashable ? (info.bitsPerSample === 16 ? 's16le' : 's24le') : 'null', '-'], (b) => { if (hashable) hash.update(b) })
   const decodeOk = out.code === 0 && out.stderr.trim() === ''
   let md5: VerifyResult['md5'] = 'none'
   if (decodeOk && hashable && info.md5) md5 = hash.digest('hex') === info.md5 ? 'match' : 'mismatch'

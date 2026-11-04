@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { HostLimiter } from '@shared/fetch'
 import type { FetchFn } from './download'
-import { archive, archiveCandidate, archiveQualityLabel, chooseFiles, queryTokens, rankArchive, commons, jamendo, link, parseLicense, type Candidate, type ProviderCtx } from './providers'
+import { ccmixter, parseMixter, archive, archiveCandidate, archiveQualityLabel, chooseFiles, queryTokens, rankArchive, commons, jamendo, link, parseLicense, type Candidate, type ProviderCtx } from './providers'
 
 const json = (body: unknown, status = 200): Response => new Response(JSON.stringify(body), { status })
 const ctx = (fn: FetchFn, extra: Partial<ProviderCtx> = {}): ProviderCtx => ({ fetchFn: fn, limiter: new HostLimiter(0), signal: new AbortController().signal, sleep: async () => {}, ...extra })
@@ -121,6 +121,32 @@ describe('wikimedia commons', () => {
   })
   it('rejects malformed ids', async () => {
     await expect(commons.resolve('https://evil', ctx(async () => json(body)))).rejects.toThrow(/Bad file id/)
+  })
+})
+
+describe('ccMixter', () => {
+  const rec = (o: Record<string, unknown> = {}): Record<string, unknown> => ({
+    upload_id: 25389, upload_name: 'Reverie', user_name: '_ghost', user_real_name: 'Ghost', license_url: 'https://creativecommons.org/licenses/by/3.0/',
+    files: [{ file_name: 'r.mp3', download_url: 'https://ccmixter.org/content/_ghost/r.mp3', file_filesize: ' (1.57MB)', file_format_info: { 'default-ext': 'mp3' } }, { file_name: 'r.flac', download_url: 'https://ccmixter.org/content/_ghost/r.flac', file_filesize: ' (20.0MB)', file_format_info: { 'default-ext': 'flac' } }], ...o })
+  it('offers items with a licence we understand and prefers lossless', async () => {
+    const r = await ccmixter.search('reverie', ctx(async () => json([rec(), rec({ upload_id: 2, license_url: 'https://example.com/x' })])))
+    expect(r).toHaveLength(1)
+    expect(r[0]).toMatchObject({ provider: 'ccmixter', id: '25389', quality: 'FLAC', license: { name: 'CC BY 3.0' } })
+  })
+  it('drops files hosted anywhere but ccmixter.org, or that are not audio', () => {
+    const hits = parseMixter([rec({ files: [{ download_url: 'https://evil.example/r.flac', file_format_info: { 'default-ext': 'flac' } }, { download_url: 'https://ccmixter.org/a.zip', file_format_info: { 'default-ext': 'zip' } }, { download_url: 'http://ccmixter.org/a.mp3', file_format_info: { 'default-ext': 'mp3' } }] })])
+    expect(hits).toEqual([])
+  })
+  it('resolves to one file honouring the quality choice, and rejects hostile ids', async () => {
+    const lossless = await ccmixter.resolve('25389', ctx(async () => json([rec()]), { quality: 'lossless' }))
+    expect(lossless[0]).toMatchObject({ format: 'flac', size: 20e6, url: 'https://ccmixter.org/content/_ghost/r.flac' })
+    const compact = await ccmixter.resolve('25389', ctx(async () => json([rec()]), { quality: 'compact' }))
+    expect(compact[0]!.format).toBe('mp3')
+    await expect(ccmixter.resolve('1;DROP', ctx(async () => json([])))).rejects.toThrow(/Bad item id/)
+  })
+  it('survives junk', async () => {
+    expect(parseMixter({ not: 'an array' })).toEqual([])
+    expect(await ccmixter.search('x', ctx(async () => json('<html>')))).toEqual([])
   })
 })
 

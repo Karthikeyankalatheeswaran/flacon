@@ -13,7 +13,7 @@ const webPreferences = {
   nodeIntegration: false
 } as const
 
-function load(win: BrowserWindow, page: 'index' | 'island'): void {
+function load(win: BrowserWindow, page: 'index' | 'island' | 'mini'): void {
   const dev = process.env['ELECTRON_RENDERER_URL']
   if (dev) void win.loadURL(`${dev}/${page}.html`)
   else void win.loadFile(join(__dirname, `../renderer/${page}.html`))
@@ -90,5 +90,33 @@ export function createIslandWindow(spot: () => IslandSpot = () => ({ edge: 'top'
     screen.removeListener('display-removed', replace)
     screen.removeListener('display-metrics-changed', replace)
   })
+  return win
+}
+
+export const MINI_SIZE = { width: 320, height: 156 } as const
+
+/** The mini player: small, frameless, always on top by default; remembers where it was left. */
+export function createMiniWindow(pos: { x: number; y: number } | null): BrowserWindow {
+  const win = new BrowserWindow({
+    ...MINI_SIZE,
+    ...(pos ? { x: pos.x, y: pos.y } : {}),
+    frame: false,
+    resizable: false,
+    maximizable: false,
+    fullscreenable: false,
+    minimizable: true,
+    show: false,
+    hasShadow: true,
+    alwaysOnTop: true,
+    skipTaskbar: false,
+    title: 'Flacon Mini Player',
+    backgroundColor: '#13303A',
+    ...(isMac ? {} : { icon: join(app.getAppPath(), 'build', 'icon.png') }),
+    webPreferences
+  })
+  win.setAlwaysOnTop(true, 'floating')
+  lockDown(win)
+  win.once('ready-to-show', () => win.show())
+  load(win, 'mini')
   return win
 }

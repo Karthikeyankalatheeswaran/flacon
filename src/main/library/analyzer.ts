@@ -1,6 +1,7 @@
 // Background purity analysis: decodes ~20 s from the middle of each lossless track with ffmpeg,
 // finds where the signal stops (spectrum) and how many bits the samples really use, and stores it.
 // One file at a time, low priority, resumable (rows stay `analyzed = 0` until measured).
+import { inputArgs } from '../ffmpegSafe'
 import { spawn } from 'node:child_process'
 import { bandSpectrum, effectiveBitDepth, findCutoff, isFakeBitDepth, judgeSpectrum } from '../fetcher/analysis'
 import { purityPercent } from '@shared/purity'
@@ -23,7 +24,7 @@ function decode(ffmpeg: string, file: string, startSec: number, rate: number, ch
   const ch = Math.max(1, Math.min(8, channels || 2))
   const maxBytes = rate * SECONDS * 4 * ch + 4096
   return new Promise((resolve) => {
-    const args = ['-v', 'error', '-nostdin', '-ss', startSec.toFixed(2), '-t', String(SECONDS), '-i', file, '-vn', '-ar', String(rate), '-f', 's32le', '-']
+    const args = ['-v', 'error', '-nostdin', '-ss', startSec.toFixed(2), '-t', String(SECONDS), ...inputArgs(file), '-vn', '-ar', String(rate), '-f', 's32le', '-']
     const p = spawn(ffmpeg, args, { stdio: ['ignore', 'pipe', 'ignore'] })
     const chunks: Buffer[] = []
     let n = 0

@@ -55,6 +55,13 @@ const MIGRATIONS: string[] = [
   create index plays_at on plays(played_at);
   create index plays_path on plays(path);
   create index tracks_pending on tracks(analyzed) where analyzed = 0;
+  `,
+  // v4: measured loudness (integrated LUFS) and dynamic range (DR) per track
+  `
+  alter table tracks add column lufs real;
+  alter table tracks add column dr real;
+  alter table tracks add column loud_done integer not null default 0;
+  create index tracks_loud_pending on tracks(loud_done) where loud_done = 0;
   `
 ]
 

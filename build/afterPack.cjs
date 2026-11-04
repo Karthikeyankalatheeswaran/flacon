@@ -5,8 +5,24 @@ const { execFileSync } = require('node:child_process')
 const fs = require('node:fs')
 const path = require('node:path')
 
+// Electron "fuses" are switches burned into the binary. Turning off what Flacon never uses removes whole attack
+// paths: no ELECTRON_RUN_AS_NODE shell, no NODE_OPTIONS, no --inspect, and the app code may only come from app.asar.
+async function hardenFuses(ctx, name) {
+  const { flipFuses, FuseVersion, FuseV1Options } = require('@electron/fuses')
+  const target = ctx.electronPlatformName === 'darwin' ? path.join(ctx.appOutDir, `${name}.app`) : path.join(ctx.appOutDir, `${name}.exe`)
+  await flipFuses(target, {
+    version: FuseVersion.V1,
+    resetAdHocDarwinSignature: ctx.electronPlatformName === 'darwin' && ctx.arch === 3 /* arm64 */,
+    [FuseV1Options.RunAsNode]: false,
+    [FuseV1Options.EnableNodeOptionsEnvironmentVariable]: false,
+    [FuseV1Options.EnableNodeCliInspectArguments]: false,
+    [FuseV1Options.OnlyLoadAppFromAsar]: true
+  })
+}
+
 module.exports = async function afterPack(ctx) {
   const name = ctx.packager.appInfo.productFilename
+  if (ctx.electronPlatformName === 'darwin' || ctx.electronPlatformName === 'win32') await hardenFuses(ctx, name)
   if (ctx.electronPlatformName === 'darwin' && !process.env.CSC_LINK && !process.env.CSC_NAME) {
     execFileSync('codesign', ['--force', '--deep', '-s', '-', path.join(ctx.appOutDir, `${name}.app`)], { stdio: 'inherit' })
   }

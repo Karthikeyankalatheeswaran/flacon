@@ -31,6 +31,8 @@ export const SettingsSchema = z.object({
   /** Where the island sits: screen edge and alignment along it. */
   islandEdge: z.enum(['top', 'bottom']).catch('top'),
   islandAlign: z.enum(['left', 'center', 'right']).catch('center'),
+  /** Name of the sound output chosen in Settings; '' follows the system default. */
+  outputDevice: z.string().max(256).catch(''),
   volume: z.number().min(0).max(1).catch(0.8),
   /** Floating island: on/off, when it shows, size, artwork and the purity badge. */
   islandEnabled: z.boolean().catch(true),
@@ -42,6 +44,12 @@ export const SettingsSchema = z.object({
   /** Seconds of overlap between tracks; 0 = gapless without a fade. */
   crossfade: z.number().int().min(0).max(10).catch(0),
   showLyrics: z.boolean().catch(false),
+  /** Look up missing lyrics on LRCLIB (sends artist, title, album and length). Off until the user opts in. */
+  lyricsOnline: z.boolean().catch(false),
+  /** Where the mini player was last left (main-only; not part of the renderer-facing settings). */
+  miniPos: z.object({ x: z.number().int(), y: z.number().int() }).nullable().catch(null),
+  /** Custom keyboard shortcuts: command id → accelerator. Only differences from the defaults are stored. */
+  shortcuts: z.record(z.string().max(40), z.string().max(40)).catch({}),
   shuffle: z.boolean().catch(false),
   repeat: z.enum(['off', 'all', 'one']).catch('off'),
   onboarded: z.boolean().catch(false),

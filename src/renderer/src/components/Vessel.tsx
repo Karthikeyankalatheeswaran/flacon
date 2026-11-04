@@ -5,8 +5,16 @@ import { sliderLabel } from '@shared/playback'
 import { useStore } from '@/store'
 import { Icon } from './icons'
 import { PurityMeter, purityColor } from './Purity'
+import { Visualizer } from './Visualizer'
 import { QueuePanel } from './QueuePanel'
 import { LyricsPanel } from './LyricsPanel'
+
+/** " · −9.2 LUFS · DR 8" once measured; empty before. */
+function loud(m: { lufs?: number | null; dr?: number | null } | null | undefined): string {
+  if (!m) return ''
+  const parts = [m.lufs != null ? `${m.lufs.toFixed(1).replace('-', '−')} LUFS` : '', m.dr != null ? `DR ${Math.round(m.dr)}` : ''].filter(Boolean)
+  return parts.length ? ` · ${parts.join(' · ')}` : ''
+}
 
 function spec(t: { sampleRate: number; bitDepth: number | null; codec: string; path: string }): string {
   const dsd = /\.(dsf|dff)$/i.test(t.path) ? 'DSD→PCM · ' : ''
@@ -65,7 +73,7 @@ export function Vessel({ over }: { over: boolean }): JSX.Element {
           </div>
           <div className="vessel-quality" title={facts ? purityDetail({ ...facts }) : undefined}>
             {facts ? <PurityMeter f={facts} width={72} label={false} /> : null}
-            <span className="t-label" style={{ color: 'inherit' }}>{facts ? <b style={{ color: purityColor(facts) === 'var(--ink)' ? 'inherit' : undefined }}>{purityBadge(facts)}</b> : null}{facts ? ' · ' : ''}{spec(t)}</span>
+            <span className="t-label" style={{ color: 'inherit' }}>{facts ? <b style={{ color: purityColor(facts) === 'var(--ink)' ? 'inherit' : undefined }}>{purityBadge(facts)}</b> : null}{facts ? ' · ' : ''}{spec(t)}{loud(meta)}</span>
           </div>
           <div className="scrub" style={{ marginTop: 10 }}>
             <input
@@ -102,6 +110,7 @@ export function Vessel({ over }: { over: boolean }): JSX.Element {
         <div role="tablist" aria-label="Panel" style={{ display: 'flex' }}>
           <button type="button" role="tab" className="vtab" aria-selected={vesselTab === 'queue'} onClick={() => setVesselTab('queue')}><Icon name="queue" size={16} /> Up next</button>
           <button type="button" role="tab" className="vtab" aria-selected={vesselTab === 'lyrics'} onClick={() => setVesselTab('lyrics')}><Icon name="lyrics" size={16} /> Lyrics</button>
+          <button type="button" role="tab" className="vtab" aria-selected={vesselTab === 'viz'} onClick={() => setVesselTab('viz')}><Icon name="equalizer" size={16} /> Visualizer</button>
         </div>
         <span style={{ marginLeft: 'auto', display: 'flex', gap: 4 }}>
           <button type="button" className={`vbtn${eqOpen ? ' lit' : ''}`} style={{ width: 32, height: 32 }} aria-label="Equalizer" aria-pressed={eqOpen} title={`Equalizer${pb.eq.enabled ? ' (on)' : ''}`} onClick={() => setEqOpen(!eqOpen)}><Icon name="eq" size={18} /></button>
@@ -109,7 +118,7 @@ export function Vessel({ over }: { over: boolean }): JSX.Element {
         </span>
       </div>
       <div className="vessel-panel" role="tabpanel">
-        {vesselTab === 'queue' ? <QueuePanel /> : <LyricsPanel />}
+        {vesselTab === 'queue' ? <QueuePanel /> : vesselTab === 'lyrics' ? <LyricsPanel /> : <Visualizer />}
       </div>
       <div role="status" aria-live="polite" className="sr-only">{t ? `Now playing ${t.title}` : ''}</div>
       {toastShown && <div role="alert" className="toast">{toastShown}</div>}

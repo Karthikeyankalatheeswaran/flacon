@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
-import { songQualityLabel, timecode, type LibrarySong, type SongSort } from '@shared/library'
+import { loudnessTitle, songQualityLabel, timecode, type LibrarySong, type SongSort } from '@shared/library'
 import { applyClick, emptySelection, moveFocus, type Selection } from '@shared/selection'
 import { bridge } from '@/lib/bridge'
 import { useStore } from '@/store'
@@ -22,6 +22,7 @@ const COLUMNS: Array<{ key: SongSort | 'n' | 'fav'; label: string; sortable: boo
   { key: 'album', label: 'Album', sortable: true },
   { key: 'plays', label: 'Plays', sortable: true, align: 'end' },
   { key: 'duration', label: 'Time', sortable: true, align: 'end' },
+  { key: 'dr', label: 'Loudness', sortable: true, align: 'end' },
   { key: 'purity', label: 'Purity', sortable: true }
 ]
 
@@ -158,13 +159,13 @@ export function SongsTable({ text, scope = 'all', initialSort = 'title', initial
     }
   }
 
-  const grid = useMemo(() => `36px 28px minmax(${MIN_COL}px, ${widths[0]}fr) minmax(${MIN_COL}px, ${widths[1]}fr) minmax(${MIN_COL}px, ${widths[2]}fr) 48px 56px 148px`, [widths])
+  const grid = useMemo(() => `36px 28px minmax(${MIN_COL}px, ${widths[0]}fr) minmax(${MIN_COL}px, ${widths[1]}fr) minmax(${MIN_COL}px, ${widths[2]}fr) 48px 56px 96px 148px`, [widths])
 
   const toggleSort = (key: SongSort): void => {
     if (key === sort) setDir((d) => (d === 'asc' ? 'desc' : 'asc'))
     else {
       setSort(key)
-      setDir(key === 'duration' || key === 'quality' || key === 'added' || key === 'purity' || key === 'plays' || key === 'lastPlayed' ? 'desc' : 'asc')
+      setDir(key === 'duration' || key === 'quality' || key === 'added' || key === 'purity' || key === 'dr' || key === 'plays' || key === 'lastPlayed' ? 'desc' : 'asc')
     }
   }
 
@@ -232,7 +233,7 @@ export function SongsTable({ text, scope = 'all', initialSort = 'title', initial
                 return (
                   <div key={it.key} role="row" aria-rowindex={it.index + 2} className="srow" style={pos}>
                     <span className="t-label ink-2" role="gridcell" style={{ textAlign: 'right' }}>{it.index + 1}</span>
-                    <span /><span className="skel" style={{ width: '60%' }} /><span className="skel" style={{ width: '40%' }} /><span className="skel" style={{ width: '40%' }} /><span /><span /><span />
+                    <span /><span className="skel" style={{ width: '60%' }} /><span className="skel" style={{ width: '40%' }} /><span className="skel" style={{ width: '40%' }} /><span /><span /><span /><span />
                   </div>
                 )
               }
@@ -280,6 +281,7 @@ export function SongsTable({ text, scope = 'all', initialSort = 'title', initial
                   <span className="cell ink-2 ell" role="gridcell" dir="auto">{s.album}</span>
                   <span className="cell t-label ink-2" role="gridcell" style={{ textAlign: 'right', fontSize: 13 }}>{s.playCount || ''}</span>
                   <span className="cell t-label ink-2" role="gridcell" style={{ textAlign: 'right', fontSize: 13 }}>{timecode(s.durationSec)}</span>
+                  <span className="cell t-label ink-2" role="gridcell" style={{ textAlign: 'right', fontSize: 12 }} title={loudnessTitle(s)}>{s.dr != null ? `DR ${Math.round(s.dr)}` : ''}</span>
                   <span className="cell" role="gridcell" style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }} title={songQualityLabel(s)}>
                     <PurityMeter f={s} width={48} />
                     <span className="t-label ink-2 ell">{s.offline ? 'offline' : s.lossless ? `${s.bitDepth ?? 16}/${+(s.sampleRate / 1000).toFixed(1)}` : s.codec.toUpperCase()}</span>

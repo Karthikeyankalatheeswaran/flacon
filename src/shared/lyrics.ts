@@ -1,7 +1,7 @@
 // Lyrics: synced LRC ("[01:23.45] line") or plain text, from a sidecar .lrc or an embedded tag.
 
 export interface LyricLine { t: number | null; text: string }
-export interface Lyrics { synced: boolean; lines: LyricLine[]; source: 'sidecar' | 'embedded' }
+export interface Lyrics { synced: boolean; lines: LyricLine[]; source: 'sidecar' | 'embedded' | 'online' }
 
 const STAMP = /\[(\d{1,3}):(\d{2})(?:[.:](\d{1,3}))?\]/g
 

@@ -46,6 +46,7 @@ function mockBridge(): FlaconBridge {
     ...initialPlayback,
     status: 'playing',
     outputRate: 96000,
+    outputDevices: [{ id: 'a', label: 'MacBook Pro Speakers' }, { id: 'b', label: 'USB DAC' }],
     queueLength: 3,
     track: { path: '/mock/Undertow.flac', title: 'Undertow', durationSec: 380, sampleRate: 96000, channels: 2, bitDepth: 24, codec: 'flac' },
     positionSec: 112
@@ -67,6 +68,18 @@ function mockBridge(): FlaconBridge {
     islandDrag: () => {},
     islandMenu: () => {},
     showMain: () => {},
+    vizSubscribe: () => {},
+    onViz: (cb) => {
+      // Browser preview: a gentle moving spectrum so the panel can be designed without audio.
+      const id = window.setInterval(() => {
+        const t = Date.now() / 700
+        cb(Uint8Array.from({ length: 48 }, (_, i) => Math.max(0, Math.min(255, 200 * Math.exp(-i / 22) * (0.55 + 0.45 * Math.sin(t + i * 0.5)) + 18))))
+      }, 50)
+      return () => window.clearInterval(id)
+    },
+    report: async (req) => ({ ok: true, message: req.op === 'get' ? '' : 'Not available in the browser preview.', text: `Flacon problem report (preview)\n\n${req.note || '(nothing written)'}\n\nApp\n  Flacon preview\n\nRecent events\n  (none)` }),
+    logError: () => {},
+    mini: () => {},
     onState: (cb) => {
       subs.add(cb)
       return () => subs.delete(cb)
@@ -123,6 +136,7 @@ function mockBridge(): FlaconBridge {
     onLibraryActivity: (cb) => (activitySubs.add(cb), () => activitySubs.delete(cb)),
     onAnalysis: () => () => {},
     onMenuAction: () => () => {},
+    trashDuplicates: async () => ({ trashed: 0, message: 'Not available in the browser preview.' }),
     playlistIo: async () => ({ ok: true, message: 'Not available in the browser preview.' }),
     reveal: () => {},
     ...mockFetch()
@@ -135,7 +149,7 @@ export const bridge: FlaconBridge = window.flacon ?? mockBridge()
 let mockUpdate: UpdateStatus = { state: 'idle' }
 const updateSubs = new Set<(s: UpdateStatus) => void>()
 const mockFolders = ['/Users/you/Music/Flacon', '/Volumes/Archive/Lossless']
-const mockSettings: AppSettingsInfo = { launchAtLogin: false, pauseOnSuspend: true, updateChecks: true, islandEdge: 'top', islandAlign: 'center', onboarded: false, islandEnabled: true, islandMode: 'always', islandSize: 'comfortable', islandArt: true, islandBadge: true, replayGain: 'off', crossfade: 0, showLyrics: false, recovered: false, canLaunchAtLogin: true, platform: 'darwin' }
+const mockSettings: AppSettingsInfo = { launchAtLogin: false, pauseOnSuspend: true, updateChecks: true, islandEdge: 'top', islandAlign: 'center', outputDevice: '', onboarded: false, islandEnabled: true, islandMode: 'always', islandSize: 'comfortable', islandArt: true, islandBadge: true, replayGain: 'off', crossfade: 0, showLyrics: false, lyricsOnline: false, shortcuts: {}, recovered: false, canLaunchAtLogin: true, platform: 'darwin' }
 const settingsSubs = new Set<(s: AppSettingsInfo) => void>()
 const activitySubs = new Set<() => void>()
 
@@ -153,6 +167,13 @@ function mockCall(req: { op: string; [k: string]: unknown }): unknown {
     case 'playlistDelete': mockPlaylists = mockPlaylists.filter((p) => p.id !== req.id); return null
     case 'lyrics': return mockLyrics
     case 'home': return mockHome()
+    case 'duplicates': return [
+      { title: 'Undertow', artist: 'Halden', durationSec: 380, members: [
+        { path: '/Music/Halden/Tidal/01 Undertow.flac', title: 'Undertow', artist: 'Halden', album: 'Tidal', durationSec: 380, codec: 'flac', sampleRate: 96000, bitDepth: 24, size: 96e6, lossless: true, purity: 98, dr: 12 },
+        { path: '/Music/Compilations/Best Of/04 Undertow.flac', title: 'Undertow', artist: 'Halden', album: 'Best Of', durationSec: 380, codec: 'flac', sampleRate: 44100, bitDepth: 16, size: 31e6, lossless: true, purity: 91, dr: 9 },
+        { path: '/Music/Old/Halden - Undertow.mp3', title: 'Undertow', artist: 'Halden', album: 'Tidal', durationSec: 380, codec: 'mp3', sampleRate: 44100, bitDepth: null, size: 9e6, lossless: false, purity: null, dr: null }
+      ] }
+    ]
     case 'stats': return mockStats
     case 'analysisProgress': return { done: 0, total: 0 }
     case 'trackMetas': return []

@@ -279,6 +279,62 @@ export const jamendo: Provider = {
   }
 }
 
+interface MixterFile { name: string; ext: string; url: string; size: number }
+interface MixterHit { id: string; title: string; artist: string; license: License; files: MixterFile[] }
+
+const num = (v: unknown): number => (typeof v === 'number' ? v : Number(v) || 0)
+const sizeOf = (s: unknown): number => {
+  const m = /([\d.]+)\s*(KB|MB|GB)/i.exec(String(s ?? ''))
+  return m ? Math.round(Number(m[1]) * { kb: 1e3, mb: 1e6, gb: 1e9 }[m[2]!.toLowerCase() as 'kb' | 'mb' | 'gb']) : 0
+}
+
+/** ccMixter's JSON → hits we may offer: a CC licence we understand, and download links on ccmixter.org itself. Pure and tested. */
+export function parseMixter(json: unknown): MixterHit[] {
+  if (!Array.isArray(json)) return []
+  return json.flatMap((r: Record<string, unknown>) => {
+    const license = parseLicense(str(r['license_url']))
+    const id = String(num(r['upload_id']))
+    if (!license || id === '0') return []
+    const files = (Array.isArray(r['files']) ? r['files'] : []).flatMap((f: Record<string, unknown>) => {
+      const info = (f['file_format_info'] ?? {}) as Record<string, unknown>
+      const ext = str(info['default-ext']).toLowerCase()
+      const url = str(f['download_url'])
+      const c = checkFetchUrl(url)
+      if (!/^(flac|wav|aiff?|mp3|ogg)$/.test(ext) || !c.ok || c.url.hostname !== 'ccmixter.org') return []
+      return [{ name: str(f['file_name']), ext, url, size: sizeOf(f['file_filesize']) }]
+    })
+    return files.length ? [{ id, title: str(r['upload_name']), artist: str(r['user_real_name']) || str(r['user_name']), license, files }] : []
+  })
+}
+const mixterBest = (h: MixterHit): MixterFile => [...h.files].sort((a, b) => Number(LOSSLESS_EXT.test(`x.${b.ext}`)) - Number(LOSSLESS_EXT.test(`x.${a.ext}`)))[0]!
+
+/** ccMixter: Creative Commons remixes and samples. Mostly MP3; some uploads carry FLAC/WAV. */
+export const ccmixter: Provider = {
+  id: 'ccmixter',
+  name: 'ccMixter',
+  blurb: 'Creative Commons remixes, samples and a cappellas from ccMixter. Mostly MP3; FLAC or WAV when the artist uploaded it.',
+  async search(query, ctx) {
+    const q = ctx.quality ?? 'best'
+    const text = query.replace(/[^\p{L}\p{N}\s'-]/gu, ' ').trim().slice(0, 100)
+    if (!text) return []
+    const j = await getJson(`https://ccmixter.org/api/query?f=json&dataview=default&limit=12&sort=rank&search=${enc(text)}`, ctx)
+    return parseMixter(j)
+      .filter((h) => (q === 'lossless' ? h.files.some((f) => LOSSLESS_EXT.test(`x.${f.ext}`)) : q === 'compact' ? h.files.some((f) => !LOSSLESS_EXT.test(`x.${f.ext}`)) : true))
+      .slice(0, 20)
+      .map((h) => ({ provider: 'ccmixter' as const, id: h.id, title: h.title, artist: h.artist, license: h.license, quality: LOSSLESS_EXT.test(`x.${mixterBest(h).ext}`) ? mixterBest(h).ext.toUpperCase() : 'MP3' }))
+  },
+  async resolve(id, ctx) {
+    if (!/^\d{1,10}$/.test(id)) throw new ProviderError('Bad item id.')
+    const [h] = parseMixter(await getJson(`https://ccmixter.org/api/query?f=json&dataview=default&ids=${id}`, ctx))
+    if (!h) throw new ProviderError('This item isn’t available or has no licence we recognise.')
+    const q = ctx.quality ?? 'best'
+    const pool = q === 'lossless' ? h.files.filter((f) => LOSSLESS_EXT.test(`x.${f.ext}`)) : q === 'compact' ? h.files.filter((f) => !LOSSLESS_EXT.test(`x.${f.ext}`)) : h.files
+    if (!pool.length) throw new ProviderError(`This item has ${QUALITY_HINT[q]}.`)
+    const f = mixterBest({ ...h, files: pool })
+    return [{ provider: 'ccmixter', title: h.title, artist: h.artist, album: 'ccMixter', url: f.url, format: f.ext, size: f.size, license: h.license }]
+  }
+}
+
 /** "Paste link": a direct https link to a lossless file or ZIP the user is entitled to (e.g. a store's purchase download). */
 export const link: Provider = {
   id: 'link',
@@ -299,4 +355,4 @@ export const link: Provider = {
   }
 }
 
-export const PROVIDERS: Record<FetchItem['provider'], Provider> = { archive, commons, jamendo, link }
+export const PROVIDERS: Record<FetchItem['provider'], Provider> = { archive, commons, ccmixter, jamendo, link }

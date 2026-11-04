@@ -3,7 +3,7 @@ import { promises as fsp } from 'node:fs'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { basename, dirname, extname, isAbsolute, resolve as resolvePath } from 'node:path'
-import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, nativeTheme, net, powerMonitor, powerSaveBlocker, protocol, screen, shell } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, type IpcMainEvent, type IpcMainInvokeEvent, Menu, nativeImage, nativeTheme, net, powerMonitor, powerSaveBlocker, protocol, screen, shell } from 'electron'
 import { AppSettingsSchema, type AppSettings, type AppSettingsInfo } from '@shared/ipc'
 import { displayKey, isVisibleOn, type WindowBounds } from '@shared/settings'
 import { UpdateActionSchema } from '@shared/ipc'
@@ -14,6 +14,9 @@ import type { AnalysisProgress, Album, LibraryProgress, LibrarySong, LibraryTrac
 import { defaultEq, sanitizeEq, type EqSettings } from '@shared/eq'
 import { AUDIO_EXTENSIONS, initialPlayback, isAudioPath, type PlaybackState } from '@shared/playback'
 import { cueRealPath } from '@shared/cue'
+import { sanitizeShortcuts } from '@shared/shortcuts'
+import { VIZ_BARS } from '@shared/spectrum'
+import { safeToTrash, type DuplicateGroup } from '@shared/duplicates'
 import { createEngineWindow, currentQueue, dispatch, setCueLookup, setGainLookup, setQueuePaths, isEngine, resolveFfmpeg, sendToEngine, shutdownEngine } from './engine'
 import { forceMenu, refreshMenu, type MenuDeps } from './menu'
 import { FetchControlSchema, FetchPickSchema, FetchSearchSchema, FetchSettingsSchema } from '@shared/fetchIpc'
@@ -21,13 +24,16 @@ import { z } from 'zod'
 import { fetchControl, fetchEnqueue, fetchList, fetchSearch, getFetchSettings, setFetchSettings, startFetcher, stopFetcher } from './fetcher/service'
 import type { FolderListing } from '@shared/folders'
 import { artDir, call as libraryCall, getProgress, startLibrary, stopLibrary } from './library/client'
-import { installCsp } from './security'
+import { installCsp, isTrustedUrl } from './security'
+import { fetchLyricsOnline } from './lyricsOnline'
+import { logEvent, logFromRenderer, makeReport, reportAction, startDiagnostics } from './diagnostics'
 import { createTray, updateTray } from './tray'
-import { createIslandWindow, createMainWindow, placeIsland } from './windows'
+import { createIslandWindow, createMainWindow, createMiniWindow, MINI_SIZE, placeIsland } from './windows'
 import { ISLAND_SPOTS, ISLAND_WINDOW, nearestSpot, type IslandSpot } from './islandPlacement'
 
 // Unpackaged runs would otherwise be called "Electron" in the menu bar and Dock.
 if (!app.isPackaged) app.setName('Flacon')
+startDiagnostics()
 
 // Local artwork is served only through this scheme, from the art cache dir, by hashed filename.
 protocol.registerSchemesAsPrivileged([{ scheme: 'flacon-art', privileges: { standard: true, secure: true, supportFetchAPI: true } }])
@@ -38,6 +44,7 @@ let playback: PlaybackState = { ...initialPlayback }
 let blockerId: number | null = null
 let settings: SettingsStore
 let islandWin: BrowserWindow | null = null
+let miniWin: BrowserWindow | null = null
 let volumeRestored = false
 let wasPlayingBeforeSuspend = false
 let nowMeta: LibrarySong | null = null
@@ -120,8 +127,8 @@ function applyLoginItem(enabled: boolean): void {
 function settingsInfo(): AppSettingsInfo {
   const s = settings.get()
   return {
-    launchAtLogin: s.launchAtLogin, pauseOnSuspend: s.pauseOnSuspend, updateChecks: s.updateChecks, islandEdge: s.islandEdge, islandAlign: s.islandAlign, onboarded: s.onboarded,
-    islandEnabled: s.islandEnabled, islandMode: s.islandMode, islandSize: s.islandSize, islandArt: s.islandArt, islandBadge: s.islandBadge, replayGain: s.replayGain, crossfade: s.crossfade, showLyrics: s.showLyrics,
+    launchAtLogin: s.launchAtLogin, pauseOnSuspend: s.pauseOnSuspend, updateChecks: s.updateChecks, islandEdge: s.islandEdge, islandAlign: s.islandAlign, outputDevice: s.outputDevice, onboarded: s.onboarded,
+    islandEnabled: s.islandEnabled, islandMode: s.islandMode, islandSize: s.islandSize, islandArt: s.islandArt, islandBadge: s.islandBadge, replayGain: s.replayGain, crossfade: s.crossfade, showLyrics: s.showLyrics, lyricsOnline: s.lyricsOnline, shortcuts: s.shortcuts,
     recovered: settings.recoveredFrom !== null, canLaunchAtLogin: app.isPackaged, platform: process.platform as AppState['platform']
   }
 }
@@ -205,6 +212,22 @@ function endIslandDrag(snap: boolean): void {
   else placeIsland(islandWin, islandSpot())
 }
 
+/** Open or close the mini player; its last position is restored if that spot is still on a screen. */
+function toggleMini(): void {
+  if (miniWin && !miniWin.isDestroyed()) { miniWin.close(); return }
+  const saved = settings.get().miniPos
+  const onScreen = saved && screen.getAllDisplays().some((d) => saved.x >= d.bounds.x && saved.y >= d.bounds.y && saved.x + MINI_SIZE.width <= d.bounds.x + d.bounds.width && saved.y + MINI_SIZE.height <= d.bounds.y + d.bounds.height)
+  const win = createMiniWindow(onScreen ? saved : null)
+  miniWin = win
+  let t: NodeJS.Timeout | undefined
+  win.on('move', () => {
+    clearTimeout(t)
+    t = setTimeout(() => { if (!win.isDestroyed()) { const [x, y] = win.getPosition(); settings.set({ miniPos: { x: x!, y: y! } }) } }, 400)
+  })
+  win.on('closed', () => { clearTimeout(t); if (miniWin === win) miniWin = null; forceMenu(menuDeps) })
+  forceMenu(menuDeps)
+}
+
 /** Create or destroy the floating island to match the setting. */
 function syncIsland(): void {
   const on = settings.get().islandEnabled
@@ -254,11 +277,14 @@ const menuDeps: MenuDeps = {
   importPlaylist: () => void playlistIo({ op: 'import' }).then((r) => r.message && ui(`toast:${r.message}`)),
   checkForUpdates: () => { checkForUpdate(); ui('go:settings') },
   setTheme: (t) => { theme = t; settings.set({ theme: t }); nativeTheme.themeSource = t; broadcast(); forceMenu(menuDeps) },
+  toggleMini,
+  miniOn: () => !!miniWin && !miniWin.isDestroyed(),
   toggleIsland: () => { settings.set({ islandEnabled: !settings.get().islandEnabled }); syncIsland(); const info = settingsInfo(); for (const w of uiWindows()) w.webContents.send(Channels.settingsChanged, info); forceMenu(menuDeps) },
   playback: () => playback,
   theme: () => theme,
   islandOn: () => settings.get().islandEnabled,
-  lyricsOn: () => settings.get().showLyrics
+  lyricsOn: () => settings.get().showLyrics,
+  shortcuts: () => settings.get().shortcuts
 }
 
 function withMeta(s: PlaybackState): PlaybackState {
@@ -295,8 +321,11 @@ function trackListening(s: PlaybackState): void {
   }
 }
 
+let lastEngineError: string | null = null
 function onEngineState(s: PlaybackState): void {
   playback = s
+  if (s.error && s.error !== lastEngineError) logEvent('warn', `playback: ${s.error}`)
+  lastEngineError = s.error
   persistEq(s.eq)
   // The engine boots at the default volume before our saved one is applied: don't let that echo overwrite it.
   if (!volumeRestored) volumeRestored = Math.abs(s.volume - settings.get().volume) < 0.005
@@ -371,12 +400,14 @@ async function addPaths(paths: string[]): Promise<AddPathsResult> {
 
 /** Apply a validated settings patch everywhere it matters, then tell every window. */
 function applySettings(patch: Partial<AppSettings>): AppSettingsInfo {
+  if (patch.shortcuts !== undefined) patch = { ...patch, shortcuts: sanitizeShortcuts(patch.shortcuts) } // never trust the renderer's key map
   settings.set(patch)
   if (patch.launchAtLogin !== undefined) applyLoginItem(patch.launchAtLogin)
   if ((patch.islandEdge !== undefined || patch.islandAlign !== undefined) && islandWin && !islandWin.isDestroyed()) placeIsland(islandWin, islandSpot())
   if (patch.islandEnabled !== undefined) syncIsland()
   if (patch.replayGain !== undefined) dispatch({ type: 'replayGain', mode: patch.replayGain })
   if (patch.crossfade !== undefined) dispatch({ type: 'crossfade', seconds: patch.crossfade })
+  if (patch.outputDevice !== undefined) dispatch({ type: 'output', deviceId: '', label: patch.outputDevice })
   const info = settingsInfo()
   for (const w of uiWindows()) w.webContents.send(Channels.settingsChanged, info)
   forceMenu(menuDeps)
@@ -384,27 +415,39 @@ function applySettings(patch: Partial<AppSettings>): AppSettingsInfo {
   return info
 }
 
+/** Every IPC handler goes through these: a message from anything but one of our own pages is dropped. */
+const rendererDirUrl = (): string => pathToFileURL(join(__dirname, '../renderer')).toString()
+function trusted(e: IpcMainEvent | IpcMainInvokeEvent): boolean {
+  const ok = !!e.senderFrame && e.senderFrame === e.sender.mainFrame && isTrustedUrl(e.senderFrame.url, rendererDirUrl(), process.env['ELECTRON_RENDERER_URL'])
+  if (!ok) logEvent('warn', `ipc: refused a message from ${e.senderFrame?.url ?? 'an unknown frame'}`)
+  return ok
+}
+const handle = (channel: string, fn: (e: IpcMainInvokeEvent, ...args: any[]) => unknown): void => // eslint-disable-line @typescript-eslint/no-explicit-any
+  ipcMain.handle(channel, (e, ...args) => { if (!trusted(e)) throw new Error('Untrusted sender'); return fn(e, ...args) })
+const on = (channel: string, fn: (e: IpcMainEvent, ...args: any[]) => void): void => // eslint-disable-line @typescript-eslint/no-explicit-any
+  void ipcMain.on(channel, (e, ...args) => { if (trusted(e)) fn(e, ...args) })
+
 function registerIpc(): void {
-  ipcMain.handle(Channels.getState, () => snapshot())
-  ipcMain.handle(Channels.setTheme, (_e, raw: unknown) => {
+  handle(Channels.getState, () => snapshot())
+  handle(Channels.setTheme, (_e, raw: unknown) => {
     const next = ThemeSchema.parse(raw) // reject anything unexpected from a renderer
     theme = next
     settings.set({ theme: next })
     nativeTheme.themeSource = next
     broadcast()
   })
-  ipcMain.on(Channels.island, (e, raw: unknown) => {
+  on(Channels.island, (e, raw: unknown) => {
     // Only the island window's own contents may toggle its click-through.
     const win = BrowserWindow.fromWebContents(e.sender)
     if (typeof raw !== 'boolean' || !win) return
     win.setIgnoreMouseEvents(!raw, { forward: true })
   })
-  ipcMain.on(Channels.showMain, (e) => {
+  on(Channels.showMain, (e) => {
     if (islandWin && !islandWin.isDestroyed() && e.sender === islandWin.webContents) trayDeps.showMain()
   })
-  ipcMain.handle(Channels.getPlayback, () => playback)
-  ipcMain.on(Channels.playbackCommand, (_e, raw: unknown) => dispatch(raw))
-  ipcMain.handle(Channels.openFiles, async () => {
+  handle(Channels.getPlayback, () => playback)
+  on(Channels.playbackCommand, (_e, raw: unknown) => dispatch(raw))
+  handle(Channels.openFiles, async () => {
     const opts = {
       properties: ['openFile', 'multiSelections'] as Array<'openFile' | 'multiSelections'>,
       filters: [{ name: 'Audio', extensions: [...AUDIO_EXTENSIONS] }]
@@ -413,42 +456,42 @@ function registerIpc(): void {
     if (!r.canceled) openPaths(r.filePaths)
   })
   // Only the hidden engine window may publish playback state.
-  ipcMain.on(Channels.engineState, (e, s: PlaybackState) => {
+  on(Channels.engineState, (e, s: PlaybackState) => {
     if (isEngine(e.sender.id)) onEngineState(s)
   })
-  ipcMain.handle(Channels.libraryAlbums, () => libraryCall<Album[]>({ op: 'albums' }))
-  ipcMain.handle(Channels.librarySearch, (_e, raw: unknown) => {
+  handle(Channels.libraryAlbums, () => libraryCall<Album[]>({ op: 'albums' }))
+  handle(Channels.librarySearch, (_e, raw: unknown) => {
     const q = SearchQuerySchema.parse(raw)
     return q.trim() ? libraryCall<Album[]>({ op: 'search', query: q }) : libraryCall<Album[]>({ op: 'albums' })
   })
-  ipcMain.handle(Channels.librarySongs, (_e, raw: unknown) => libraryCall<SongsPage>({ op: 'songs', query: SongsQuerySchema.parse(raw) }))
-  ipcMain.handle(Channels.libraryGetProgress, () => getProgress())
-  ipcMain.handle(Channels.libraryAddFolder, async (): Promise<AddPathsResult> => {
+  handle(Channels.librarySongs, (_e, raw: unknown) => libraryCall<SongsPage>({ op: 'songs', query: SongsQuerySchema.parse(raw) }))
+  handle(Channels.libraryGetProgress, () => getProgress())
+  handle(Channels.libraryAddFolder, async (): Promise<AddPathsResult> => {
     const opts = { title: 'Choose your music folder', properties: ['openDirectory', 'multiSelections'] as Array<'openDirectory' | 'multiSelections'> }
     const r = mainWin && !mainWin.isDestroyed() ? await dialog.showOpenDialog(mainWin, opts) : await dialog.showOpenDialog(opts)
     if (r.canceled) return { folders: 0, files: 0, ignored: 0 }
     return addPaths(r.filePaths)
   })
-  ipcMain.handle(Channels.libraryAddPaths, (_e, raw: unknown) => addPaths(AddPathsSchema.parse(raw)))
-  ipcMain.handle(Channels.libraryFolders, () => libraryCall<string[]>({ op: 'folders' }))
-  ipcMain.handle(Channels.libraryRemoveFolder, async (_e, raw: unknown) => {
+  handle(Channels.libraryAddPaths, (_e, raw: unknown) => addPaths(AddPathsSchema.parse(raw)))
+  handle(Channels.libraryFolders, () => libraryCall<string[]>({ op: 'folders' }))
+  handle(Channels.libraryRemoveFolder, async (_e, raw: unknown) => {
     const path = z.string().min(1).max(4096).parse(raw)
     // Only folders that are actually in the library can be removed: the renderer can't name arbitrary paths.
     if (!(await libraryCall<string[]>({ op: 'folders' })).includes(path)) return
     await libraryCall({ op: 'removeFolder', path })
   })
-  ipcMain.handle(Channels.updateGet, () => updateStatus())
-  ipcMain.on(Channels.updateAction, (_e, raw: unknown) => {
+  handle(Channels.updateGet, () => updateStatus())
+  on(Channels.updateAction, (_e, raw: unknown) => {
     const op = UpdateActionSchema.safeParse(raw)
     if (!op.success) return
     if (op.data === 'check') checkForUpdate()
     else if (op.data === 'download') downloadUpdate()
     else installUpdate()
   })
-  ipcMain.handle(Channels.settingsGet, () => settingsInfo())
-  ipcMain.handle(Channels.settingsSet, (_e, raw: unknown) => applySettings(AppSettingsSchema.partial().parse(raw) as Partial<AppSettings>))
+  handle(Channels.settingsGet, () => settingsInfo())
+  handle(Channels.settingsSet, (_e, raw: unknown) => applySettings(AppSettingsSchema.partial().parse(raw) as Partial<AppSettings>))
   // Island: drag to reposition (main follows the cursor; the pill snaps to the nearest spot on drop) and its right-click menu.
-  ipcMain.on(Channels.islandDrag, (e, raw: unknown) => {
+  on(Channels.islandDrag, (e, raw: unknown) => {
     if (!islandWin || islandWin.isDestroyed() || e.sender !== islandWin.webContents) return
     if (raw === 'start') {
       if (dragTimer) clearInterval(dragTimer)
@@ -460,7 +503,7 @@ function registerIpc(): void {
       }, 16)
     } else if (raw === 'end') endIslandDrag(true)
   })
-  ipcMain.on(Channels.islandMenu, (e) => {
+  on(Channels.islandMenu, (e) => {
     if (!islandWin || islandWin.isDestroyed() || e.sender !== islandWin.webContents) return
     Menu.buildFromTemplate([
       { label: 'Position', submenu: positionItems() },
@@ -471,34 +514,35 @@ function registerIpc(): void {
   })
   setCueLookup((paths) => libraryCall({ op: 'cueRefs', paths }))
   setGainLookup((paths) => libraryCall<LibrarySong[]>({ op: 'trackMetas', paths }).then((r) => r.map((x) => ({ path: x.path, gainDb: x.gainDb, peak: x.peak }))))
-  ipcMain.handle(Channels.libraryFolder, (_e, raw: unknown) => libraryCall<FolderListing>({ op: 'folder', dir: FolderDirSchema.parse(raw) }))
-  ipcMain.handle(Channels.libraryPlayFolder, async (_e, raw: unknown) => {
+  handle(Channels.libraryFolder, (_e, raw: unknown) => libraryCall<FolderListing>({ op: 'folder', dir: FolderDirSchema.parse(raw) }))
+  handle(Channels.libraryPlayFolder, async (_e, raw: unknown) => {
     const { dir, index } = PlayFolderSchema.parse(raw)
     const listing = await libraryCall<FolderListing>({ op: 'folder', dir })
     if (listing.tracks.length) dispatch({ type: 'load', tracks: listing.tracks.map((t) => ({ path: t.path })), index: Math.min(index, listing.tracks.length - 1) })
   })
-  ipcMain.handle(Channels.libraryPlayAlbum, async (_e, raw: unknown) => {
+  handle(Channels.libraryPlayAlbum, async (_e, raw: unknown) => {
     const albumId = Number(AlbumIdSchema.parse(raw))
     const tracks = await libraryCall<LibraryTrack[]>({ op: 'albumTracks', albumId })
     if (tracks.length) dispatch({ type: 'load', tracks: tracks.map((t) => ({ path: t.path })), index: 0 })
   })
-  ipcMain.handle(Channels.fetchSearch, (_e, raw: unknown) => {
+  handle(Channels.fetchSearch, (_e, raw: unknown) => {
     const q = FetchSearchSchema.parse(raw)
     return fetchSearch(q.provider, q.query, q.quality)
   })
-  ipcMain.handle(Channels.fetchEnqueue, (_e, raw: unknown) => {
+  handle(Channels.fetchEnqueue, (_e, raw: unknown) => {
     const p = FetchPickSchema.parse(raw)
     return fetchEnqueue(p.provider, p.id, p.quality)
   })
-  ipcMain.on(Channels.fetchControl, (_e, raw: unknown) => {
+  on(Channels.fetchControl, (_e, raw: unknown) => {
     const c = FetchControlSchema.safeParse(raw)
     if (c.success) fetchControl(c.data.op, c.data.id)
   })
-  ipcMain.handle(Channels.fetchGet, () => fetchList())
-  ipcMain.handle(Channels.fetchSettingsGet, () => getFetchSettings())
-  ipcMain.handle(Channels.fetchSettingsSet, (_e, raw: unknown) => setFetchSettings(FetchSettingsSchema.parse(raw)))
-  ipcMain.handle(Channels.libraryCall, async (_e, raw: unknown) => {
+  handle(Channels.fetchGet, () => fetchList())
+  handle(Channels.fetchSettingsGet, () => getFetchSettings())
+  handle(Channels.fetchSettingsSet, (_e, raw: unknown) => setFetchSettings(FetchSettingsSchema.parse(raw)))
+  handle(Channels.libraryCall, async (_e, raw: unknown) => {
     const req = RendererLibraryRequestSchema.parse(raw) // only the allow-listed operations reach the worker
+    if (req.op === 'lyricsOnline') return fetchLyricsOnline(req.path, settings.get().lyricsOnline)
     return libraryCall(req)
   })
   const resolveSource = (src: z.infer<typeof PlayRequestSchema>['source']): Promise<string[]> => {
@@ -509,7 +553,7 @@ function registerIpc(): void {
       case 'paths': return Promise.resolve(src.paths.filter(isAudioPath))
     }
   }
-  ipcMain.handle(Channels.libraryPlay, async (_e, raw: unknown) => {
+  handle(Channels.libraryPlay, async (_e, raw: unknown) => {
     const r = PlayRequestSchema.parse(raw)
     const paths = await resolveSource(r.source)
     if (!paths.length) return
@@ -520,19 +564,76 @@ function registerIpc(): void {
       dispatch({ type: 'load', tracks, index: Math.floor(Math.random() * tracks.length) })
     } else dispatch({ type: 'enqueue', tracks, mode: r.mode })
   })
-  ipcMain.handle(Channels.getQueue, () => queueSnapshot)
-  ipcMain.on(Channels.engineQueue, (e, raw: unknown) => {
+  handle(Channels.getQueue, () => queueSnapshot)
+  on(Channels.engineQueue, (e, raw: unknown) => {
     if (!isEngine(e.sender.id)) return
     const paths = (raw as { paths?: unknown })?.paths
     if (Array.isArray(paths) && paths.every((p) => typeof p === 'string')) void onEngineQueue(paths as string[])
   })
-  ipcMain.on(Channels.reveal, (_e, raw: unknown) => {
+  on(Channels.reveal, (_e, raw: unknown) => {
     // Only files that are in the library can be revealed: the renderer can't point Finder at arbitrary paths.
     const path = z.string().min(1).max(4096).safeParse(raw)
     if (!path.success) return
     void libraryCall<LibrarySong[]>({ op: 'trackMetas', paths: [path.data] }).then((r) => r[0] && shell.showItemInFolder(cueRealPath(r[0].path)))
   })
-  ipcMain.handle(Channels.playlistIo, (_e, raw: unknown) => playlistIo(z.discriminatedUnion('op', [z.object({ op: z.literal('import') }), z.object({ op: z.literal('export'), id: z.number().int().min(1) })]).parse(raw)))
+  // Visualizer: the engine only runs its analyser while at least one window is watching.
+  const vizWatchers = new Set<number>()
+  const vizSync = (): void => dispatch({ type: 'viz', on: vizWatchers.size > 0 })
+  on(Channels.vizSub, (e, raw: unknown) => {
+    if (isEngine(e.sender.id) || typeof raw !== 'boolean') return
+    const id = e.sender.id
+    const before = vizWatchers.size
+    if (raw) {
+      vizWatchers.add(id)
+      e.sender.once('destroyed', () => { vizWatchers.delete(id); vizSync() })
+    } else vizWatchers.delete(id)
+    if ((before === 0) !== (vizWatchers.size === 0)) vizSync()
+  })
+  on(Channels.engineViz, (e, bars: unknown) => {
+    if (!isEngine(e.sender.id) || !(bars instanceof Uint8Array) || bars.length !== VIZ_BARS) return
+    for (const w of uiWindows()) if (vizWatchers.has(w.webContents.id)) w.webContents.send(Channels.viz, bars)
+  })
+  on(Channels.logRenderer, (e, raw: unknown) => {
+    if (isEngine(e.sender.id) || typeof raw !== 'string') return
+    logFromRenderer(raw.slice(0, 1500))
+  })
+  handle(Channels.report, async (e, raw: unknown) => {
+    if (isEngine(e.sender.id)) return { ok: false, message: 'Not allowed.', text: '' }
+    const req = z.object({ op: z.enum(['get', 'copy', 'save']), note: z.string().max(4000) }).parse(raw)
+    const s = settings.get()
+    // Only plain facts about how the app is set up: never paths, device names or the Jamendo ID.
+    const text = makeReport(req.note, { theme, replayGain: s.replayGain, crossfade: s.crossfade, outputDevice: s.outputDevice ? 'custom' : 'system default', islandEnabled: s.islandEnabled, islandMode: s.islandMode, lyricsOnline: s.lyricsOnline, showLyrics: s.showLyrics, updateChecks: s.updateChecks, launchAtLogin: s.launchAtLogin, customShortcuts: Object.keys(s.shortcuts).length })
+    const r = await reportAction(req.op, text, BrowserWindow.fromWebContents(e.sender) ?? undefined)
+    return { ...r, text }
+  })
+  on(Channels.mini, (e, raw: unknown) => {
+    if (!miniWin || miniWin.isDestroyed() || e.sender !== miniWin.webContents) return // only the mini window controls itself
+    const op = z.enum(['close', 'expand', 'pin', 'unpin']).safeParse(raw)
+    if (!op.success) return
+    if (op.data === 'close') miniWin.close()
+    else if (op.data === 'expand') trayDeps.showMain()
+    else miniWin.setAlwaysOnTop(op.data === 'pin', 'floating')
+  })
+  handle(Channels.trashDuplicates, async (e, raw: unknown) => {
+    if (isEngine(e.sender.id)) return { trashed: 0, message: 'Not allowed.' }
+    const requested = z.array(z.string().min(1).max(4096)).max(2000).parse(raw)
+    // Never trust the renderer's list: re-derive the duplicate groups here and only allow files inside them,
+    // always leaving one copy of every song.
+    const groups = await libraryCall<DuplicateGroup[]>({ op: 'duplicates' })
+    const allowed = safeToTrash(groups, requested)
+    if (allowed.length === 0) return { trashed: 0, message: 'Nothing to move.' }
+    const win = BrowserWindow.fromWebContents(e.sender)
+    const opts = { type: 'warning' as const, buttons: ['Move to Trash', 'Cancel'], defaultId: 1, cancelId: 1, message: `Move ${allowed.length} ${allowed.length === 1 ? 'file' : 'files'} to the Trash?`, detail: 'One copy of every song stays in your library. You can restore these from the Trash.' }
+    const { response } = win ? await dialog.showMessageBox(win, opts) : await dialog.showMessageBox(opts)
+    if (response !== 0) return { trashed: 0, message: 'Cancelled.' }
+    let trashed = 0
+    for (const p of allowed) {
+      try { await shell.trashItem(p); trashed++ } catch { /* already gone or not allowed: skip */ }
+    }
+    void libraryCall({ op: 'scan' })
+    return { trashed, message: trashed === allowed.length ? `Moved ${trashed} to the Trash.` : `Moved ${trashed} of ${allowed.length}; the rest could not be moved.` }
+  })
+  handle(Channels.playlistIo, (_e, raw: unknown) => playlistIo(z.discriminatedUnion('op', [z.object({ op: z.literal('import') }), z.object({ op: z.literal('export'), id: z.number().int().min(1) })]).parse(raw)))
   nativeTheme.on('updated', broadcast)
 }
 
@@ -635,6 +736,7 @@ if (!app.requestSingleInstanceLock()) {
     dispatch({ type: 'repeat', mode: settings.get().repeat })
     dispatch({ type: 'replayGain', mode: settings.get().replayGain })
     dispatch({ type: 'crossfade', seconds: settings.get().crossfade })
+    if (settings.get().outputDevice) dispatch({ type: 'output', deviceId: '', label: settings.get().outputDevice })
     restoreSession()
     mainWin = makeMainWindow(launchedHidden())
     startUpdater((st) => uiWindows().forEach((w) => w.webContents.send(Channels.updateState, st)), () => settings.get().updateChecks)

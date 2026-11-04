@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
 import { describeUpdate } from '@shared/update'
 import { bridge } from '@/lib/bridge'
+import { Icon } from './icons'
 import { IslandPlacePicker } from './IslandPlacePicker'
+import { ShortcutsEditor } from './ShortcutsEditor'
 import { useStore } from '@/store'
 
 type Theme = 'system' | 'light' | 'dark'
@@ -37,6 +39,7 @@ export function SettingsPage(): JSX.Element {
   const version = useStore((s) => s.libraryVersion)
   const upd = useStore((s) => s.update)
   const analysis = useStore((s) => s.analysis)
+  const outputs = useStore((s) => s.pb.outputDevices)
   const [folders, setFolders] = useState<string[] | null>(null)
   const [confirm, setConfirm] = useState<string | null>(null)
 
@@ -73,6 +76,16 @@ export function SettingsPage(): JSX.Element {
         </section>
         <section aria-labelledby="set-play" style={{ marginTop: 32 }}>
           <h2 id="set-play" className="t-label ink-2 set-h">Playback</h2>
+          <Row label="Find missing lyrics online" hint="Looks songs up on LRCLIB, a free lyrics database, when they have none. Only the artist, title, album and length are sent. Found lyrics are kept on this computer.">
+            <input type="checkbox" role="switch" aria-label="Find missing lyrics online" checked={settings?.lyricsOnline ?? false} onChange={(e) => void update({ lyricsOnline: e.target.checked })} />
+          </Row>
+          <Row label="Sound output" hint="Where Flacon plays. Your choice is remembered by name and picked up again when the device is plugged back in.">
+            <select className="set-select" aria-label="Sound output" value={settings?.outputDevice ?? ''} onChange={(e) => void update({ outputDevice: e.target.value })}>
+              <option value="">System default</option>
+              {settings?.outputDevice && !outputs.some((d) => d.label === settings.outputDevice) && <option value={settings.outputDevice}>{settings.outputDevice} (not connected)</option>}
+              {outputs.map((d) => <option key={d.id} value={d.label}>{d.label}</option>)}
+            </select>
+          </Row>
           <Row label="ReplayGain" hint="Levels loud and quiet records using the gain tags in your files. Songs without tags play untouched; nothing is ever boosted into clipping.">
             <Seg label="ReplayGain" value={settings?.replayGain ?? 'off'} options={[['off', 'Off'], ['track', 'Track']]} onChange={(v) => void update({ replayGain: v })} />
           </Row>
@@ -119,6 +132,16 @@ export function SettingsPage(): JSX.Element {
               {upd.state === 'ready' && <button type="button" className="primary" onClick={() => bridge.updateAction('install')}>Restart to update</button>}
             </span>
           </div>
+        </section>
+        <section aria-labelledby="set-help" style={{ marginTop: 32 }}>
+          <h2 id="set-help" className="t-label ink-2 set-h">Help</h2>
+          <Row label="Report a problem" hint="Builds a plain-text report you can read, copy or save. Nothing is sent anywhere, and your name, e-mail and folders are removed.">
+            <button type="button" className="ghost-btn" onClick={() => useStore.getState().setReportOpen(true)}><Icon name="bug-beetle" size={16} /> Report a problem…</button>
+          </Row>
+        </section>
+        <section aria-labelledby="set-kb" style={{ marginTop: 32 }}>
+          <h2 id="set-kb" className="t-label ink-2 set-h">Keyboard shortcuts</h2>
+          <ShortcutsEditor />
         </section>
         <section aria-labelledby="set-lib" style={{ marginTop: 32 }}>
           <h2 id="set-lib" className="t-label ink-2 set-h">Library folders</h2>

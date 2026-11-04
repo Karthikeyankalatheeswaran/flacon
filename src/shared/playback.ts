@@ -35,17 +35,21 @@ export const PlaybackCommandSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('prev') }),
   z.object({ type: z.literal('seek'), seconds: z.number().min(0).max(36 * 3600) }),
   z.object({ type: z.literal('volume'), slider: z.number().min(0).max(1) }),
-  z.object({ type: z.literal('output'), deviceId: z.string().max(512) }),
+  z.object({ type: z.literal('output'), deviceId: z.string().max(512), /** Pick by name (what Settings stores): ids change between launches. */ label: z.string().max(256).optional() }),
   z.object({ type: z.literal('eq'), eq: EqSettingsSchema }),
   z.object({ type: z.literal('enqueue'), tracks: z.array(TrackRefSchema).min(1).max(5000), mode: z.enum(['next', 'last']) }),
   z.object({ type: z.literal('remove'), index: z.number().int().min(0).max(1_000_000) }),
   z.object({ type: z.literal('move'), from: z.number().int().min(0).max(1_000_000), to: z.number().int().min(0).max(1_000_000) }),
   z.object({ type: z.literal('jump'), index: z.number().int().min(0).max(1_000_000) }),
   z.object({ type: z.literal('clear') }),
+  /** Bring back an earlier queue (slot = index into PlaybackState.queueHistory). */
+  z.object({ type: z.literal('queueRestore'), slot: z.number().int().min(0).max(50) }),
   z.object({ type: z.literal('shuffle'), on: z.boolean() }),
   z.object({ type: z.literal('repeat'), mode: z.enum(['off', 'all', 'one']) }),
   z.object({ type: z.literal('replayGain'), mode: z.enum(['off', 'track']) }),
-  z.object({ type: z.literal('crossfade'), seconds: z.number().min(0).max(10) })
+  z.object({ type: z.literal('crossfade'), seconds: z.number().min(0).max(10) }),
+  /** Start/stop streaming spectrum bars to the UI (only while a visualizer is on screen). */
+  z.object({ type: z.literal('viz'), on: z.boolean() })
 ])
 export type PlaybackCommand = z.infer<typeof PlaybackCommandSchema>
 
@@ -67,6 +71,9 @@ export interface PlaybackState {
   volume: number
   outputRate: number
   outputLatencySec: number
+  /** Sound outputs the OS offers right now, and the one in use ('' = system default). */
+  outputDevices: Array<{ id: string; label: string }>
+  outputId: string
   queueIndex: number
   queueLength: number
   error: string | null
@@ -77,13 +84,15 @@ export interface PlaybackState {
   replayGain: ReplayGainMode
   /** Bumps whenever the queue contents change; the UI refetches the queue when it moves. */
   queueRev: number
+  /** Earlier queues that can be brought back, oldest first ("undo clear", "undo remove", the queue a new album replaced). */
+  queueHistory: Array<{ why: string; count: number; at: number }>
   /** Library facts for the playing track (art, purity…); attached by main, absent for files outside the library. */
   meta?: LibrarySong | null
 }
 
 export const initialPlayback: PlaybackState = {
-  status: 'idle', track: null, positionSec: 0, volume: 0.8, outputRate: 0, outputLatencySec: 0,
-  queueIndex: 0, queueLength: 0, error: null, toast: null, eq: defaultEq, shuffle: false, repeat: 'off', replayGain: 'off', queueRev: 0, meta: null
+  status: 'idle', track: null, positionSec: 0, volume: 0.8, outputRate: 0, outputLatencySec: 0, outputDevices: [], outputId: '',
+  queueIndex: 0, queueLength: 0, error: null, toast: null, eq: defaultEq, shuffle: false, repeat: 'off', replayGain: 'off', queueRev: 0, queueHistory: [], meta: null
 }
 
 /** Perceptual volume: slider 0..1 → −60 dB..0 dB, applied in the float domain. 0 is true silence. */

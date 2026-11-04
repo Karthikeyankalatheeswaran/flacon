@@ -52,7 +52,7 @@ export function AlbumCard({ album, onRelease, onDragState, vesselLeft, onPlay }:
       <div className="line1" style={{ fontWeight: 600, marginTop: 12 }} dir="auto">{album.title}</div>
       <div className="line1 ink-2" dir="auto">{album.artist}</div>
       <div style={{ marginTop: 8 }}><PurityMeter f={{ purity: album.purity ?? null, lossless: !lossy, upscaled: up }} width={96} /></div>
-      <span className="t-label" style={{ color: up ? 'var(--warn)' : 'var(--ink-2)', marginTop: 8 }}>{qualityLabel(album)}</span>
+      <span className="t-label" style={{ color: up ? 'var(--warn)' : 'var(--ink-2)', marginTop: 8 }}>{qualityLabel(album)}{album.dr != null ? ` · DR ${album.dr}` : ''}</span>
       {/* Name = visible text + this hint, so voice-control users can say what they see (WCAG 2.5.3). */}
       <span className="sr-only">. Press Enter to play, or drag onto the right panel to add it to the queue.</span>
     </motion.div>

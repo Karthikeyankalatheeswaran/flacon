@@ -6,7 +6,8 @@ const MAIN: Array<{ page: Page; label: string; icon: IconName }> = [
   { page: 'home', label: 'Tonight', icon: 'tonight' },
   { page: 'library', label: 'Library', icon: 'library' },
   { page: 'fetch', label: 'Fetch', icon: 'fetch' },
-  { page: 'stats', label: 'Listening', icon: 'stats' }
+  { page: 'stats', label: 'Listening', icon: 'stats' },
+  { page: 'duplicates', label: 'Duplicates', icon: 'copy' }
 ]
 
 export function Rail(): JSX.Element {
@@ -88,6 +89,16 @@ export function Rail(): JSX.Element {
             </div>
             <div style={{ height: 1, background: 'var(--rule)' }}>
               <div style={{ height: 1, width: `${(analysis.done / Math.max(1, analysis.total)) * 100}%`, background: 'var(--accent)' }} />
+            </div>
+          </div>
+        ) : analysis.loud && analysis.loud.total > analysis.loud.done ? (
+          <div className="rail-progress" role="status" aria-live="off" title="Flacon reads each song once to measure its loudness and dynamic range (DR). It runs quietly in the background.">
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span>Measuring loudness</span>
+              <span>{analysis.loud.done.toLocaleString()} / {analysis.loud.total.toLocaleString()}</span>
+            </div>
+            <div style={{ height: 1, background: 'var(--rule)' }}>
+              <div style={{ height: 1, width: `${(analysis.loud.done / Math.max(1, analysis.loud.total)) * 100}%`, background: 'var(--accent)' }} />
             </div>
           </div>
         ) : null}

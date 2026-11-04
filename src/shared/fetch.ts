@@ -17,16 +17,49 @@ export const FETCH_LIMITS = {
 
 // ---- URLs ----------------------------------------------------------------------------------------
 
-const PRIVATE_V4 = [/^127\./, /^10\./, /^192\.168\./, /^169\.254\./, /^172\.(1[6-9]|2\d|3[01])\./, /^0\./, /^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./]
+const PRIVATE_V4 = [
+  /^127\./, /^10\./, /^192\.168\./, /^169\.254\./, /^172\.(1[6-9]|2\d|3[01])\./, /^0\./, /^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./,
+  /^192\.0\.0\./, /^198\.1[89]\./, /^(22[4-9]|23\d|24\d|25[0-5])\./ // IETF protocol block, benchmarking, multicast / reserved
+]
+/** Names that only exist inside a network: never a public download host. */
+const INTERNAL_SUFFIXES = ['.localhost', '.local', '.internal', '.lan', '.home', '.home.arpa', '.corp', '.localdomain', '.intranet', '.private']
 
-/** True for loopback / private / link-local hosts (SSRF guard). DNS rebinding is checked again at connect time. */
+/** Expand an IPv6 literal (no brackets) into eight 16-bit groups, or null if it isn't one. */
+function groupsV6(h: string): number[] | null {
+  if (!h.includes(':')) return null
+  let s = h
+  const tail = /(\d+)\.(\d+)\.(\d+)\.(\d+)$/.exec(s)
+  if (tail) s = s.slice(0, tail.index) + ((Number(tail[1]) << 8) | Number(tail[2])).toString(16) + ':' + ((Number(tail[3]) << 8) | Number(tail[4])).toString(16)
+  const halves = s.split('::')
+  if (halves.length > 2) return null
+  const left = halves[0] ? halves[0].split(':') : []
+  const right = halves[1] ? halves[1].split(':') : []
+  const fill = halves.length === 2 ? 8 - left.length - right.length : 0
+  if (fill < 0 || (halves.length === 1 && left.length !== 8)) return null
+  const all = [...left, ...Array<string>(fill).fill('0'), ...right].map((g) => parseInt(g || '0', 16))
+  return all.length === 8 && all.every((n) => Number.isInteger(n) && n >= 0 && n <= 0xffff) ? all : null
+}
+
+const v4FromGroups = (hi: number, lo: number): string => `${hi >> 8}.${hi & 255}.${lo >> 8}.${lo & 255}`
+
+/** True for loopback / private / link-local / internal-only hosts (SSRF guard). Names are also resolved before connecting (see electronFetch). */
 export function isPrivateHost(host: string): boolean {
-  const h = host.toLowerCase().replace(/^\[|\]$/g, '')
-  if (h === 'localhost' || h.endsWith('.localhost') || h.endsWith('.local') || h.endsWith('.internal')) return true
-  if (PRIVATE_V4.some((r) => r.test(h))) return true
-  if (h === '::1' || h === '::' || /^f[cd][0-9a-f]{2}:/.test(h) || /^fe[89ab][0-9a-f]:/.test(h)) return true
-  const mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/.exec(h)
-  return !!mapped && PRIVATE_V4.some((r) => r.test(mapped[1]!))
+  const h = host.toLowerCase().replace(/^\[|\]$/g, '').replace(/\.+$/, '') // "localhost." is localhost
+  if (!h) return true
+  const g = groupsV6(h)
+  if (g) {
+    const [a, b, c, d, e, f, hi, lo] = g as [number, number, number, number, number, number, number, number]
+    if (a === 0 && b === 0 && c === 0 && d === 0 && e === 0 && (f === 0xffff || f === 0)) {
+      // ::, ::1, IPv4-mapped (::ffff:a.b.c.d) and IPv4-compatible (::a.b.c.d): judge by the embedded IPv4 address
+      return f === 0 && hi === 0 && lo <= 1 ? true : PRIVATE_V4.some((r) => r.test(v4FromGroups(hi, lo)))
+    }
+    if (a === 0x64 && b === 0xff9b) return PRIVATE_V4.some((r) => r.test(v4FromGroups(hi, lo))) // NAT64
+    if (a === 0x2002) return PRIVATE_V4.some((r) => r.test(v4FromGroups(b, c))) // 6to4 embeds an IPv4 address
+    return (a & 0xfe00) === 0xfc00 || (a & 0xffc0) === 0xfe80 || (a & 0xffc0) === 0xfec0 || (a & 0xff00) === 0xff00 // unique-local, link-local, site-local, multicast
+  }
+  if (/^\d+\.\d+\.\d+\.\d+$/.test(h)) return PRIVATE_V4.some((r) => r.test(h))
+  if (h === 'localhost' || !h.includes('.')) return true // a bare name like "intranet" only resolves inside someone's network
+  return INTERNAL_SUFFIXES.some((x) => h.endsWith(x))
 }
 
 export type UrlCheck = { ok: true; url: URL } | { ok: false; reason: string }
@@ -157,7 +190,7 @@ export const JobStatusSchema = z.enum(['queued', 'downloading', 'verifying', 'im
 export type JobStatus = z.infer<typeof JobStatusSchema>
 
 export const FetchItemSchema = z.object({
-  provider: z.enum(['archive', 'commons', 'jamendo', 'link']),
+  provider: z.enum(['archive', 'commons', 'ccmixter', 'jamendo', 'link']),
   title: z.string().min(1).max(300),
   artist: z.string().max(300).default(''),
   album: z.string().max(300).default(''),

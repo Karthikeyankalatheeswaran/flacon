@@ -1,6 +1,7 @@
 // Audio engine: lives in a hidden BrowserWindow for the whole app session, so audio keeps
 // playing when the main window is closed. Owns the AudioContext, the worklet player, device
 // routing and navigator.mediaSession. Decoded PCM arrives from the decoder utilityProcess.
+import { barRanges, foldBars } from '@shared/spectrum'
 import { EQ_FREQS, EQ_Q, bandType, type EqSettings } from '@shared/eq'
 import { gainFromSlider, initialPlayback, type PlaybackCommand, type PlaybackState, type TrackInfo, type TrackRef } from '@shared/playback'
 import { insertAt, moveItem, nextIndex, removeAt, shuffleAfter, shuffled, type RepeatMode } from '@shared/queue'
@@ -238,6 +239,8 @@ function syncMediaSession(): void {
 let bands: BiquadFilterNode[] = []
 let preamp: GainNode
 let limiter: DynamicsCompressorNode
+let analyser: AnalyserNode
+let vizTimer = 0
 
 function buildChain(): void {
   bands = EQ_FREQS.map((f, i) => {
@@ -254,6 +257,26 @@ function buildChain(): void {
   prev.connect(preamp)
   preamp.connect(limiter)
   limiter.connect(ctx.destination)
+  // Side tap for the visualizer: reads the final signal, adds nothing to it.
+  analyser = new AnalyserNode(ctx, { fftSize: 2048, smoothingTimeConstant: 0.6, minDecibels: -80, maxDecibels: -10 })
+  limiter.connect(analyser)
+}
+
+function setViz(on: boolean): void {
+  window.clearInterval(vizTimer)
+  vizTimer = 0
+  if (!on) return
+  const bytes = new Uint8Array(analyser.frequencyBinCount)
+  const ranges = barRanges(ctx.sampleRate, analyser.fftSize)
+  let wasPlaying = true
+  vizTimer = window.setInterval(() => {
+    const playing = state.status === 'playing'
+    if (!playing && !wasPlaying) return // paused: one frame of silence was sent, nothing more
+    wasPlaying = playing
+    if (playing) analyser.getByteFrequencyData(bytes)
+    else bytes.fill(0)
+    bridge.emitViz(foldBars(bytes, ranges))
+  }, 33)
 }
 
 function applyEq(eq: EqSettings): void {
@@ -281,11 +304,21 @@ function applyReplayGain(ref: TrackRef | undefined): void {
   sendGain()
 }
 
+/** Earlier queues, so a mis-click on Clear or a replaced queue can be undone. Newest last. */
+interface QueueSnap { queue: TrackRef[]; original: TrackRef[]; index: number; why: string; at: number }
+const snaps: QueueSnap[] = []
+const MAX_SNAPS = 10
+function snapshot(why: string): void {
+  if (queue.length === 0) return
+  snaps.push({ queue: queue.slice(), original: original.slice(), index, why, at: Date.now() })
+  if (snaps.length > MAX_SNAPS) snaps.shift()
+}
+
 /** Tell main what the queue holds (play order) so the UI can show and edit it. */
 function publishQueue(): void {
   queueRev++
   bridge.emitQueue(queue.map((t) => t.path), index)
-  push({ queueRev, queueLength: queue.length, queueIndex: index })
+  push({ queueRev, queueLength: queue.length, queueIndex: index, queueHistory: snaps.map((s) => ({ why: s.why, count: s.queue.length, at: s.at })) })
 }
 
 function setShuffle(on: boolean): void {
@@ -306,29 +339,55 @@ function setShuffle(on: boolean): void {
   publishQueue()
 }
 
-async function setOutput(deviceId: string): Promise<void> {
+/** The output the user chose, by name; kept so an unplugged DAC is picked up again when it returns. */
+let preferredLabel = ''
+
+async function listOutputs(): Promise<Array<{ id: string; label: string }>> {
+  const all = await navigator.mediaDevices.enumerateDevices()
+  // "default" and "communications" are aliases of a real device: Settings shows "System default" itself.
+  return all.filter((d) => d.kind === 'audiooutput' && d.deviceId !== 'default' && d.deviceId !== 'communications' && d.label).map((d) => ({ id: d.deviceId, label: d.label }))
+}
+
+async function refreshOutputs(): Promise<void> {
+  const outputDevices = await listOutputs()
+  push({ outputDevices, outputId: sinkId })
+  // The preferred device came back (or was just chosen at launch): switch to it.
+  const want = preferredLabel && outputDevices.find((d) => d.label === preferredLabel)
+  if (want && want.id !== sinkId) await setOutput(want.id, undefined, true)
+}
+
+async function setOutput(deviceId: string, label?: string, quiet = false): Promise<void> {
+  if (label !== undefined) preferredLabel = label
+  else if (!quiet) preferredLabel = deviceId ? ((await listOutputs()).find((d) => d.id === deviceId)?.label ?? '') : ''
   try {
-    await (ctx as AudioContext & { setSinkId(id: string): Promise<void> }).setSinkId(deviceId)
-    sinkId = deviceId
+    const id = deviceId || (label ? ((await listOutputs()).find((d) => d.label === label)?.id ?? '') : '')
+    await (ctx as AudioContext & { setSinkId(id: string): Promise<void> }).setSinkId(id)
+    sinkId = id
+    push({ outputId: sinkId })
   } catch {
-    push({ toast: 'That output device is not available.' })
+    if (!quiet) push({ toast: 'That output device is not available.' })
   }
 }
 
 async function onDeviceChange(): Promise<void> {
-  if (!sinkId) return
-  const devices = await navigator.mediaDevices.enumerateDevices()
-  if (!devices.some((d) => d.kind === 'audiooutput' && d.deviceId === sinkId)) {
-    // Active device vanished: pause, tell the user, fall back to system default.
-    pause()
-    await setOutput('')
-    push({ toast: 'Output device disconnected. Playback paused on the system default.' })
+  if (sinkId) {
+    const devices = await navigator.mediaDevices.enumerateDevices()
+    if (!devices.some((d) => d.kind === 'audiooutput' && d.deviceId === sinkId)) {
+      // Active device vanished: pause, tell the user, fall back to system default (the preference is kept for when it returns).
+      pause()
+      const keep = preferredLabel
+      await setOutput('', undefined, true)
+      preferredLabel = keep
+      push({ toast: 'Output device disconnected. Playback paused on the system default.' })
+    }
   }
+  await refreshOutputs()
 }
 
 function handle(c: PlaybackCommand | { type: 'resume-context' }): void {
   switch (c.type) {
     case 'load': {
+      snapshot('Replaced by a new queue')
       let start = Math.min(c.index, c.tracks.length - 1)
       queue = c.tracks
       original = []
@@ -370,6 +429,7 @@ function handle(c: PlaybackCommand | { type: 'resume-context' }): void {
     }
     case 'remove': {
       const gone = queue[c.index]
+      snapshot(gone ? `Removed “${gone.title ?? gone.path.split(/[\\/]/).pop() ?? 'a song'}”` : 'Removed a song')
       const wasPlaying = c.index === index
       ;({ queue, index } = removeAt({ queue, index }, c.index))
       if (gone && shuffleOn) original = original.filter((t) => t !== gone)
@@ -383,7 +443,22 @@ function handle(c: PlaybackCommand | { type: 'resume-context' }): void {
       publishQueue()
       break
     }
+    case 'queueRestore': {
+      const s = snaps[c.slot]
+      if (!s) break
+      const cur = queue[index]
+      snaps.splice(c.slot, 1)
+      snapshot('Before restoring an earlier queue') // so the restore itself can be undone
+      queue = s.queue
+      original = s.original
+      const at = cur ? queue.findIndex((t) => t.path === cur.path) : -1
+      if (at >= 0) index = at // what is playing keeps playing
+      else { index = Math.min(s.index, queue.length - 1); startTrack(index) }
+      publishQueue()
+      break
+    }
     case 'clear': {
+      snapshot('Cleared the queue')
       // Keep what is playing; drop everything after it.
       queue = queue.slice(0, index + 1)
       if (shuffleOn) original = original.filter((t) => queue.includes(t))
@@ -397,7 +472,8 @@ function handle(c: PlaybackCommand | { type: 'resume-context' }): void {
     case 'seek': startTrack(index, c.seconds); break // new decode from the target; ring flushed with a 10 ms fade
     case 'volume': setVolume(c.slider); break
     case 'eq': applyEq(c.eq); break
-    case 'output': void setOutput(c.deviceId); break
+    case 'output': void setOutput(c.deviceId, c.label); break
+    case 'viz': setViz(c.on); break
     case 'resume-context': void ctx.resume(); break
   }
 }
@@ -439,6 +515,7 @@ async function boot(): Promise<void> {
   })
   booted = true
   push({ outputRate: ctx.sampleRate, queueLength: 0 })
+  void refreshOutputs()
   early.splice(0).forEach(handle) // commands that arrived while the worklet module was loading
 }
 

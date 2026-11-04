@@ -1,3 +1,4 @@
+import { inputArgs } from '../ffmpegSafe'
 import { execFile } from 'node:child_process'
 import { promises as fs } from 'node:fs'
 import { dirname, join } from 'node:path'
@@ -29,7 +30,7 @@ const exists = (p: string): Promise<boolean> => fs.access(p).then(() => true, ()
 /** Rewrite tags without touching the audio stream (-c copy keeps the FLAC MD5 valid). Atomic: temp file, then rename. */
 async function writeTags(ffmpeg: string, file: string, tags: Record<string, string>): Promise<void> {
   const tmp = file + '.tagging.flac'
-  const args = ['-v', 'error', '-y', '-i', file, '-map', '0', '-c', 'copy', ...Object.entries(tags).flatMap(([k, v]) => ['-metadata', `${k}=${v}`]), tmp]
+  const args = ['-v', 'error', '-y', ...inputArgs(file), '-map', '0', '-c', 'copy', ...Object.entries(tags).flatMap(([k, v]) => ['-metadata', `${k}=${v}`]), tmp]
   try {
     await exec(ffmpeg, args)
     await fs.rename(tmp, file)

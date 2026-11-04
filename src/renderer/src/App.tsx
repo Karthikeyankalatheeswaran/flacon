@@ -15,6 +15,8 @@ import { FoldersView } from './components/FoldersView'
 import { HomePage } from './components/HomePage'
 import { ListPage } from './components/ListPage'
 import { PlaylistsPage } from './components/PlaylistsPage'
+import { DuplicatesPage } from './components/DuplicatesPage'
+import { ReportSheet } from './components/ReportSheet'
 import { StatsPage } from './components/StatsPage'
 import { ContextMenu } from './components/ContextMenu'
 import { Sheets } from './components/Sheets'
@@ -73,7 +75,9 @@ export function App(): JSX.Element {
     if (a.startsWith('go:')) st.setPage(a.slice(3) as Parameters<typeof st.setPage>[0])
     else if (a === 'new-playlist') st.setSheet({ kind: 'new-playlist', paths: [] })
     else if (a === 'toggle-eq') st.setEqOpen(!st.eqOpen)
+    else if (a === 'report-problem') st.setReportOpen(true)
     else if (a === 'toggle-queue') st.setVesselTab('queue')
+    else if (a === 'toggle-visualizer') st.setVesselTab(st.vesselTab === 'viz' ? 'queue' : 'viz')
     else if (a === 'toggle-lyrics') {
       const on = st.vesselTab !== 'lyrics'
       st.setVesselTab(on ? 'lyrics' : 'queue')
@@ -95,7 +99,7 @@ export function App(): JSX.Element {
       <a className="skip" href="#content" onClick={(e) => { e.preventDefault(); document.getElementById('content')?.focus() }}>Skip to content</a>
       <Rail />
       <main className="main" id="content" tabIndex={-1}>
-        {page === 'home' ? <HomePage /> : page === 'fetch' ? <FetchPage /> : page === 'settings' ? <SettingsPage /> : page === 'stats' ? <StatsPage /> : page === 'playlists' ? <PlaylistsPage /> : page === 'list' ? <ListPage /> : (
+        {page === 'home' ? <HomePage /> : page === 'fetch' ? <FetchPage /> : page === 'settings' ? <SettingsPage /> : page === 'stats' ? <StatsPage /> : page === 'duplicates' ? <DuplicatesPage /> : page === 'playlists' ? <PlaylistsPage /> : page === 'list' ? <ListPage /> : (
         <>
         <div className="titlebar-drag" style={{ height: 'var(--shell-titlebar)', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', flexShrink: 0 }}>
           <label className="search no-drag">
@@ -182,6 +186,7 @@ export function App(): JSX.Element {
       <Onboarding />
       <ContextMenu />
       <Sheets />
+      <ReportSheet />
       <Toasts />
       <DropZone />
     </div>

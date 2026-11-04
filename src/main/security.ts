@@ -51,3 +51,28 @@ export function installCsp(): void {
   // Deny every permission request: Flacon needs none until the audio engine lands (and that is local).
   session.defaultSession.setPermissionRequestHandler((_wc, _perm, cb) => cb(false))
 }
+
+/**
+ * Is this the URL of one of our own pages? IPC handlers refuse anything else, so even if a page were ever navigated
+ * or framed somewhere unexpected it could not drive the main process. `rendererDir` is the file:// URL of the built
+ * renderer folder; `devUrl` is the Vite origin when running unpackaged.
+ */
+export function isTrustedUrl(url: string, rendererDir: string, devUrl?: string): boolean {
+  if (devUrl) {
+    try {
+      if (new URL(url).origin === new URL(devUrl).origin) return true
+    } catch {
+      /* fall through */
+    }
+  }
+  let u: URL
+  try {
+    u = new URL(url)
+  } catch {
+    return false
+  }
+  if (u.protocol !== 'file:') return false
+  const base = rendererDir.endsWith('/') ? rendererDir : `${rendererDir}/`
+  const normalized = u.href.split(/[?#]/)[0]!
+  return normalized.startsWith(base) && !/\/\.\.?(\/|$)/.test(normalized.slice(base.length - 1)) && /\/(index|island|mini|engine)\.html$/.test(normalized)
+}

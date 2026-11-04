@@ -8,6 +8,7 @@ import { useStore } from '@/store'
 const PROVIDERS = [
   { id: 'archive', name: 'Internet Archive', placeholder: 'Search public-domain and Creative Commons albums', blurb: 'Public-domain and Creative Commons audio: FLAC where an item has it, MP3 or Ogg otherwise. Only items with a clear licence are listed.' },
   { id: 'commons', name: 'Wikimedia Commons', placeholder: 'Search free recordings (e.g. Bach, rain, brass band)', blurb: 'Free-licence recordings from Wikimedia Commons: classical, field recordings, public domain. Mostly Ogg Vorbis, with FLAC and WAV when uploaded.' },
+  { id: 'ccmixter', name: 'ccMixter', placeholder: 'Search Creative Commons remixes and samples', blurb: 'Creative Commons remixes, samples and a cappellas. Mostly MP3, with FLAC or WAV when the artist uploaded it.' },
   { id: 'jamendo', name: 'Jamendo', placeholder: 'Search Creative Commons music', blurb: 'Creative Commons music from artists who allow downloads. Needs your own free Jamendo client ID.' },
   { id: 'link', name: 'Paste link', placeholder: 'https://…/album.zip', blurb: 'A direct link to a FLAC or WAV file, or a ZIP of them, such as a purchase download. The link must work on its own: nothing is bypassed.' }
 ] as const

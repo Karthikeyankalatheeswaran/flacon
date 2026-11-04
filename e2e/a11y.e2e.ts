@@ -1,6 +1,6 @@
 // Automated accessibility audit (axe-core, WCAG 2.1 A/AA rules) of every screen in the real app, in light and dark.
 // This is NOT a screen-reader test; see docs/accessibility.md for the VoiceOver / NVDA script.
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { copyFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
@@ -35,6 +35,9 @@ beforeAll(async () => {
   for (const [n, hz] of [['01 One', 220], ['02 Two', 330]] as const)
     execFileSync(ffmpegPath as string, ['-v', 'error', '-y', '-f', 'lavfi', '-i', `sine=f=${hz}:d=20:r=44100`, '-metadata', `title=${n.slice(3)}`, '-metadata', 'artist=Zed', '-metadata', 'album=Night Album', join(lib, 'A', 'Album', `${n}.flac`)])
   writeFileSync(join(lib, 'A', 'Album', 'x.cue'), '')
+  // A second copy of one song in another folder, so the Duplicates page has something to show.
+  mkdirSync(join(lib, 'B', 'Compilation'), { recursive: true })
+  copyFileSync(join(lib, 'A', 'Album', '01 One.flac'), join(lib, 'B', 'Compilation', '01 One.flac'))
   app = await electron.launch({ args: [resolve('out/main/index.js'), `--user-data-dir=${join(root, 'ud')}`], env: { ...process.env, FLACON_LIBRARY_FOLDER: lib } as Record<string, string>, timeout: 45_000 })
   for (let i = 0; i < 100 && !app.windows().some((w) => w.url().endsWith('/index.html')); i++) await new Promise((r) => setTimeout(r, 200))
   page = app.windows().find((w) => w.url().endsWith('/index.html'))!
@@ -66,6 +69,26 @@ describe('axe audit', () => {
       await page.getByRole('tab', { name: 'Albums' }).click()
       await page.getByRole('button', { name: /^Fetch/ }).first().click()
       await audit(`fetch/${theme}`)
+      await page.getByRole('button', { name: 'Duplicates', exact: true }).click()
+      await page.getByRole('list', { name: 'Duplicate songs' }).waitFor({ timeout: 20_000 })
+      await audit(`duplicates/${theme}`)
+      await page.getByRole('button', { name: 'Listening', exact: true }).click()
+      await page.waitForTimeout(400)
+      await audit(`listening/${theme}`)
+      await page.getByRole('button', { name: 'Library', exact: true }).first().click()
+      await page.getByRole('tab', { name: 'Visualizer' }).click()
+      await page.waitForTimeout(400)
+      await audit(`visualizer/${theme}`)
+      await page.getByRole('tab', { name: 'Lyrics' }).click()
+      await page.waitForTimeout(400)
+      await audit(`lyrics/${theme}`)
+      await page.getByRole('tab', { name: 'Up next' }).click()
+      await page.getByRole('button', { name: 'Settings', exact: true }).click()
+      await page.getByRole('button', { name: /Report a problem/ }).click()
+      await page.getByRole('dialog', { name: 'Report a problem' }).waitFor()
+      await page.waitForTimeout(500)
+      await audit(`report/${theme}`)
+      await page.keyboard.press('Escape')
       await page.getByRole('button', { name: 'Library', exact: true }).first().click()
       await page.getByRole('button', { name: 'Equalizer', exact: true }).click()
       await page.waitForTimeout(800) // let the panel's entrance animation finish: axe would otherwise measure a half-faded colour

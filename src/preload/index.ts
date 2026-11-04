@@ -20,7 +20,8 @@ if (location.pathname.endsWith('/engine.html')) {
   const engine: EngineBridge = {
     onCommand: (cb) => subscribe<PlaybackCommand | { type: 'resume-context' }>(Channels.engineCommand, cb),
     emitState: (s: PlaybackState) => ipcRenderer.send(Channels.engineState, s),
-    emitQueue: (paths: string[], index: number) => ipcRenderer.send(Channels.engineQueue, { paths, index })
+    emitQueue: (paths: string[], index: number) => ipcRenderer.send(Channels.engineQueue, { paths, index }),
+    emitViz: (bars: Uint8Array) => ipcRenderer.send(Channels.engineViz, bars)
   }
   contextBridge.exposeInMainWorld('flaconEngine', engine)
   // MessagePorts cannot cross contextBridge; hand the decoder port to the page via postMessage.
@@ -66,6 +67,12 @@ if (location.pathname.endsWith('/engine.html')) {
     onAnalysis: (cb) => subscribe<AnalysisProgress>(Channels.libraryAnalysis, cb),
     onMenuAction: (cb) => subscribe<string>(Channels.menuAction, cb),
     playlistIo: (req) => ipcRenderer.invoke(Channels.playlistIo, req),
+    trashDuplicates: (paths) => ipcRenderer.invoke(Channels.trashDuplicates, paths),
+    vizSubscribe: (on: boolean) => ipcRenderer.send(Channels.vizSub, on),
+    onViz: (cb) => subscribe<Uint8Array>(Channels.viz, cb),
+    report: (req) => ipcRenderer.invoke(Channels.report, req),
+    logError: (message: string) => ipcRenderer.send(Channels.logRenderer, message),
+    mini: (op) => ipcRenderer.send(Channels.mini, op),
     reveal: (p: string) => ipcRenderer.send(Channels.reveal, p),
     fetchSearch: (q) => ipcRenderer.invoke(Channels.fetchSearch, q),
     fetchEnqueue: (p) => ipcRenderer.invoke(Channels.fetchEnqueue, p),

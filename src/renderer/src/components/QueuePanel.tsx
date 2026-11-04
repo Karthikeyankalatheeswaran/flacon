@@ -11,6 +11,8 @@ const ROW = 52
 export function QueuePanel(): JSX.Element {
   const queue = useStore((s) => s.queue)
   const index = useStore((s) => s.pb.queueIndex)
+  const history = useStore((s) => s.pb.queueHistory)
+  const [showHistory, setShowHistory] = useState(false)
   const status = useStore((s) => s.pb.status)
   const send = useStore((s) => s.send)
   const ref = useRef<HTMLDivElement>(null)
@@ -32,8 +34,24 @@ export function QueuePanel(): JSX.Element {
     <div className="queue">
       <div className="queue-head t-label dim">
         <span>{items.length - index - 1 > 0 ? `${items.length - index - 1} up next · ${durationLabel(Math.round(upcoming / 60))}` : 'Last song in the queue'}</span>
-        <button type="button" className="ghost-btn" style={{ padding: 0 }} onClick={() => send({ type: 'clear' })} disabled={items.length <= index + 1}>Clear</button>
+        <span className="queue-tools">
+          {history.length > 0 && <button type="button" className="ghost-btn" style={{ padding: 0 }} aria-expanded={showHistory} onClick={() => setShowHistory((v) => !v)}><Icon name="clock" size={14} /> History</button>}
+          {history.length > 0 && <button type="button" className="ghost-btn" style={{ padding: 0 }} onClick={() => send({ type: 'queueRestore', slot: history.length - 1 })} title={history[history.length - 1]!.why}><Icon name="arrow-counter-clockwise" size={14} /> Undo</button>}
+          <button type="button" className="ghost-btn" style={{ padding: 0 }} onClick={() => send({ type: 'clear' })} disabled={items.length <= index + 1}>Clear</button>
+        </span>
       </div>
+      {showHistory && history.length > 0 && (
+        <ul className="queue-history" aria-label="Earlier queues">
+          {history.map((h, i) => ({ h, i })).reverse().map(({ h, i }) => (
+            <li key={`${h.at}-${i}`}>
+              <button type="button" className="qh-btn" onClick={() => { send({ type: 'queueRestore', slot: i }); setShowHistory(false) }}>
+                <span className="ell">{h.why}</span>
+                <span className="t-label dim">{h.count} {h.count === 1 ? 'song' : 'songs'}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
       <div className="queue-scroll" ref={ref}>
         <div style={{ height: virt.getTotalSize(), position: 'relative' }}>
           {virt.getVirtualItems().map((v) => {

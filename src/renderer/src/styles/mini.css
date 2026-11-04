@@ -1,0 +1,33 @@
+/* Mini player (board C14). Always the tinted, chalk-on-record look, whatever the app theme: 320 wide, 8 px radius,
+   56 px sleeve, 20 px progress pill, 36 px round play button. */
+html, body, #root { height: 100%; margin: 0; }
+body { background: var(--mini-tint, #13303a); overflow: hidden; }
+.mini { --chalk: #edede8; --chalk-2: rgb(237 237 232 / 0.62); position: relative; display: flex; flex-direction: column; height: 100%; box-sizing: border-box;
+  background: var(--mini-tint, #13303a); color: var(--chalk); font-family: var(--font-ui); font-size: 13px; user-select: none; transition: background-color var(--dur-tint) ease-in-out; }
+.mini-head { display: flex; align-items: center; gap: 12px; padding: 12px; -webkit-app-region: drag; }
+.mini-art { width: 56px; height: 56px; flex-shrink: 0; border-radius: var(--radius-sleeve); background-size: cover; }
+.mini-text { flex: 1; min-width: 0; line-height: 18px; }
+.mini-title { font-stretch: 112%; font-weight: 650; font-size: 15px; line-height: 20px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mini-sub { color: var(--chalk-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mini-tools { display: flex; align-items: center; gap: 2px; align-self: flex-start; margin-top: -4px; -webkit-app-region: no-drag; }
+.mini-tool { border: 0; background: none; color: var(--chalk-2); padding: 4px 6px; border-radius: var(--radius-control); cursor: pointer; font-family: inherit; }
+.mini-tool.on { color: var(--chalk); }
+.mini-ibtn, .mini-btn { display: grid; place-items: center; border: 0; background: none; color: var(--chalk); cursor: pointer; border-radius: var(--radius-touched); }
+.mini-ibtn { width: 24px; height: 24px; color: var(--chalk-2); }
+.mini-ibtn:hover, .mini-tool:hover, .mini-btn:hover:not(:disabled) { color: var(--chalk); background: rgb(237 237 232 / 0.12); }
+/* Progress pill: elapsed on the left, remaining on the right, the played part lit. The real range input sits on top, invisible. */
+.mini-prog { position: relative; height: 20px; margin: 0 12px; border-radius: 10px; background: rgb(237 237 232 / 0.1); overflow: hidden; -webkit-app-region: no-drag; }
+.mini-prog::before { content: ''; position: absolute; inset: 0 auto 0 0; width: calc(var(--p) * 100%); background: rgb(237 237 232 / 0.3); }
+.mini-prog input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+.mini-prog input:disabled { cursor: default; }
+.mini-prog:focus-within { outline: 2px solid var(--chalk); outline-offset: 2px; }
+.mini-t { position: absolute; top: 2px; font-variant-numeric: tabular-nums; pointer-events: none; }
+.mini-t.l { left: 10px; }
+.mini-t.r { right: 10px; color: var(--chalk-2); }
+.mini-ctl { display: flex; justify-content: center; align-items: center; gap: 24px; padding: 8px 0 12px; -webkit-app-region: no-drag; }
+.mini-btn { width: 36px; height: 36px; }
+.mini-btn:disabled { opacity: 0.35; cursor: default; }
+.mini-btn.big { background: var(--chalk); color: var(--mini-tint, #13303a); }
+.mini-btn.big:hover:not(:disabled) { background: #fff; color: var(--mini-tint, #13303a); }
+.mini button:focus-visible { outline: 2px solid var(--chalk); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { .mini { transition: none; } }

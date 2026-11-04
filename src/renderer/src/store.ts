@@ -9,7 +9,7 @@ import { initialPlayback, type PlaybackCommand, type PlaybackState } from '@shar
 import { guardTint } from '@shared/tint'
 import { bridge } from './lib/bridge'
 
-export type Page = 'home' | 'library' | 'playlists' | 'list' | 'stats' | 'fetch' | 'settings'
+export type Page = 'home' | 'library' | 'playlists' | 'list' | 'stats' | 'duplicates' | 'fetch' | 'settings'
 export type Sheet = { kind: 'new-playlist'; paths: string[] } | { kind: 'rename-playlist'; id: number; name: string } | { kind: 'add-to-playlist'; paths: string[] }
 
 interface UiState {
@@ -28,8 +28,10 @@ interface UiState {
   analysis: AnalysisProgress
   toast: string | null
   showToast: (msg: string) => void
-  vesselTab: 'queue' | 'lyrics'
-  setVesselTab: (t: 'queue' | 'lyrics') => void
+  vesselTab: 'queue' | 'lyrics' | 'viz'
+  reportOpen: boolean
+  setReportOpen: (on: boolean) => void
+  setVesselTab: (t: 'queue' | 'lyrics' | 'viz') => void
   sheet: Sheet | null
   setSheet: (s: Sheet | null) => void
   ctxMenu: { x: number; y: number; items: MenuItem[] } | null
@@ -82,6 +84,8 @@ export const useStore = create<UiState>((set) => ({
     toastTimer = window.setTimeout(() => set({ toast: null }), 4200)
   },
   vesselTab: 'queue',
+  reportOpen: false,
+  setReportOpen: (reportOpen) => set({ reportOpen }),
   setVesselTab: (vesselTab) => set({ vesselTab }),
   sheet: null,
   setSheet: (sheet) => set({ sheet }),
@@ -139,6 +143,8 @@ export const guarded = (hex: string | undefined): string => guardTint(hex ?? '#1
 
 // Bridge state → store; applies the resolved theme to <html data-theme>.
 export function initApp(): () => void {
+  window.addEventListener('error', (e) => bridge.logError(`${e.message} @ ${(e.filename ?? '').split('/').pop()}:${e.lineno}`))
+  window.addEventListener('unhandledrejection', (e) => bridge.logError(`unhandled rejection: ${e.reason instanceof Error ? e.reason.message : String(e.reason)}`))
   const apply = (app: AppState): void => {
     document.documentElement.dataset['theme'] = app.resolvedTheme
     document.documentElement.dataset['platform'] = app.platform

@@ -4,8 +4,8 @@ import { parseFile } from 'music-metadata'
 import { parseLyrics, type Lyrics } from '@shared/lyrics'
 import { cueRealPath } from '@shared/cue'
 
-/** Sidecar `.lrc` first (same base name), then lyrics embedded in the tags. */
-export async function readLyrics(path: string): Promise<Lyrics | null> {
+/** Sidecar `.lrc` first (same base name), then lyrics cached from an online lookup, then the tags. */
+export async function readLyrics(path: string, cacheFile: string | null = null): Promise<Lyrics | null> {
   const real = cueRealPath(path)
   const base = real.slice(0, real.length - extname(real).length)
   for (const ext of ['.lrc', '.LRC']) {
@@ -16,6 +16,14 @@ export async function readLyrics(path: string): Promise<Lyrics | null> {
       if (l) return l
     } catch {
       /* no sidecar */
+    }
+  }
+  if (cacheFile) {
+    try {
+      const l = parseLyrics((await fs.readFile(cacheFile)).toString('utf8'), 'online')
+      if (l) return l
+    } catch {
+      /* nothing cached */
     }
   }
   try {

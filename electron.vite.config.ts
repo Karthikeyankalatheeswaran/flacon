@@ -36,6 +36,7 @@ export default defineConfig({
         input: {
           index: resolve('src/renderer/index.html'),
           island: resolve('src/renderer/island.html'),
+          mini: resolve('src/renderer/mini.html'),
           engine: resolve('src/renderer/engine.html')
         }
       }

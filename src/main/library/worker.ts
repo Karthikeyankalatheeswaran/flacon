@@ -7,26 +7,31 @@ import { artUrl, placeholderSleeve, type Album, type HomeData, type LibraryReque
 import { SMART, SCOPE_RE, smartById } from '@shared/smart'
 import { ftsQuery } from '@shared/tags'
 import { groupLevel, likeUnder, type FolderListing, type FolderTrack } from '@shared/folders'
+import { findDuplicates, type DuplicateGroup, type DupRow } from '@shared/duplicates'
+import { lyricsCacheName, type LyricsQuery } from '@shared/lrclib'
 import { openDb, type Db } from './db'
 import { createIndexer, type Indexer } from './indexer'
 import { createAnalyzer, type Analyzer } from './analyzer'
+import { createLoudnessAnalyzer, type LoudnessAnalyzer } from './loudness'
 import { readLyrics } from './lyricsRead'
 
 let db: Db
 let indexer: Indexer
 let analyzer: Analyzer | null = null
+let loudness: LoudnessAnalyzer | null = null
+const analysisState = (): { done: number; total: number; loud: { done: number; total: number } } => ({ ...(analyzer?.progress() ?? { done: 0, total: 0 }), loud: loudness?.progress() ?? { done: 0, total: 0 } })
 let watcher: FSWatcher | null = null
 let scanning: Promise<void> | null = null
 
 const post = (m: unknown): void => process.parentPort.postMessage(m)
 
 function albumRows(where = '', params: unknown[] = [], limit?: number): Album[] {
-  const rows = db.prepare(`select id, title, album_artist as artist, art, tint, quality, ceiling, minutes, offline, track_count as trackCount, purity from albums ${where} order by added_at desc, id desc${limit ? ` limit ${Math.floor(limit)}` : ''}`).all(...params) as Array<{
-    id: number; title: string; artist: string; art: string | null; tint: string; quality: Album['quality']; ceiling: number; minutes: number; offline: number; trackCount: number; purity: number | null
+  const rows = db.prepare(`select id, title, album_artist as artist, art, tint, quality, ceiling, minutes, offline, track_count as trackCount, purity, (select round(avg(dr), 0) from tracks where album_id = albums.id and dr is not null) as dr from albums ${where} order by added_at desc, id desc${limit ? ` limit ${Math.floor(limit)}` : ''}`).all(...params) as Array<{
+    id: number; title: string; artist: string; art: string | null; tint: string; quality: Album['quality']; ceiling: number; minutes: number; offline: number; trackCount: number; purity: number | null; dr: number | null
   }>
   return rows.map((r) => ({
     id: String(r.id), title: r.title, artist: r.artist, quality: r.quality, ceilingKhz: Math.round(r.ceiling * 100) / 100, minutes: r.minutes, offline: !!r.offline, tint: r.tint, trackCount: r.trackCount,
-    purity: r.purity,
+    purity: r.purity, dr: r.dr,
     // Placeholder sleeve (tint) sits under the artwork so a missing file never shows a hole.
     sleeve: r.art ? `url("${artUrl(r.art)}") center/cover no-repeat, ${r.tint}` : placeholderSleeve(r.tint),
     artUrl: r.art ? artUrl(r.art) : null,
@@ -43,6 +48,7 @@ const SORT_SQL: Record<SongsQuery['sort'], string> = {
   quality: "case t.quality when 'hires' then 2 when 'cd' then 1 else 0 end",
   added: 't.added_at',
   purity: 'coalesce(t.purity, -1)',
+  dr: 'coalesce(t.dr, -1)',
   plays: 't.play_count',
   lastPlayed: 't.last_played',
   rating: 't.rating',
@@ -51,12 +57,12 @@ const SORT_SQL: Record<SongsQuery['sort'], string> = {
 
 const SONG_COLS = `t.id, t.path, t.title, t.artist, t.album, t.duration as durationSec, t.quality, t.sample_rate as sampleRate, t.bit_depth as bitDepth, t.codec, t.missing,
   t.lossless, t.purity, t.ceiling_hz as ceilingHz, t.eff_bits as effBits, t.upscaled, t.favorite, t.rating, t.play_count as playCount, t.last_played as lastPlayed,
-  t.added_at as addedAt, t.gain_db as gainDb, t.peak, a.art, a.tint`
+  t.added_at as addedAt, t.gain_db as gainDb, t.peak, t.lufs, t.dr, a.art, a.tint`
 
 interface SongRow {
   id: number; path: string; title: string; artist: string; album: string; durationSec: number; quality: LibrarySong['quality']; sampleRate: number; bitDepth: number | null; codec: string
   missing: number; lossless: number; purity: number | null; ceilingHz: number | null; effBits: number | null; upscaled: number; favorite: number; rating: number; playCount: number
-  lastPlayed: number; addedAt: number; gainDb: number | null; peak: number | null; art: string | null; tint: string; pos?: number; duplicate?: number
+  lastPlayed: number; addedAt: number; gainDb: number | null; peak: number | null; lufs: number | null; dr: number | null; art: string | null; tint: string; pos?: number; duplicate?: number
 }
 
 function toSong(r: SongRow): LibrarySong {
@@ -66,7 +72,7 @@ function toSong(r: SongRow): LibrarySong {
     sleeve: r.art ? `url("${artUrl(r.art)}") center/cover no-repeat, ${r.tint}` : placeholderSleeve(r.tint),
     artUrl: r.art ? artUrl(r.art) : null, duplicate: !!r.duplicate, lossless: !!r.lossless, purity: r.purity === null ? null : Math.round(r.purity),
     ceilingKhz: r.ceilingHz === null ? null : Math.round(r.ceilingHz / 100) / 10, effBits: r.effBits, upscaled: !!r.upscaled, favorite: !!r.favorite, rating: r.rating,
-    playCount: r.playCount, lastPlayed: r.lastPlayed, addedAt: r.addedAt, gainDb: r.gainDb, peak: r.peak, ...(r.pos !== undefined ? { pos: r.pos } : {})
+    playCount: r.playCount, lastPlayed: r.lastPlayed, addedAt: r.addedAt, gainDb: r.gainDb, peak: r.peak, lufs: r.lufs, dr: r.dr, ...(r.pos !== undefined ? { pos: r.pos } : {})
   }
 }
 
@@ -244,23 +250,43 @@ async function scanAll(): Promise<void> {
     post({ event: 'changed' })
     startWatching()
     analyzer?.kick()
+    loudness?.kick()
   })().finally(() => { scanning = null })
   return scanning
+}
+
+let lyricsDir = ''
+/** Where lyrics downloaded for this recording would be cached (looked up by artist/title/length, so it survives moves). */
+function lyricsCacheFor(path: string): string | null {
+  const r = db.prepare('select artist, title, album, duration as durationSec from tracks where path = ?').get(path) as LyricsQuery | undefined
+  return r && lyricsDir ? `${lyricsDir}/${lyricsCacheName(r)}` : null
+}
+
+function duplicateGroups(): DuplicateGroup[] {
+  const rows = db.prepare("select path, title, artist, album, duration as durationSec, codec, sample_rate as sampleRate, bit_depth as bitDepth, size, lossless, purity, dr from tracks where missing = 0 and cue_start is null and title <> ''").all() as Array<Omit<DupRow, 'lossless'> & { lossless: number }>
+  return findDuplicates(rows.map((r) => ({ ...r, lossless: r.lossless === 1 })))
 }
 
 async function handle(req: LibraryRequest): Promise<unknown> {
   switch (req.op) {
     case 'init': {
       mkdirSync(req.artDir, { recursive: true })
+      lyricsDir = req.lyricsDir
       const opened = openDb(req.dbPath)
       db = opened.db
       indexer = createIndexer(db, req.artDir)
       analyzer = createAnalyzer(db, req.ffmpeg, (ids) => {
         for (const id of ids) indexer.refreshAlbum(id)
-        post({ event: 'analysis', progress: analyzer!.progress() })
+        post({ event: 'analysis', progress: analysisState() })
+        loudness?.kick()
       })
+      loudness = createLoudnessAnalyzer(db, req.ffmpeg, (ids) => {
+        for (const id of ids) indexer.refreshAlbum(id)
+        post({ event: 'analysis', progress: analysisState() })
+      }, () => (analyzer?.progress().done ?? 0) < (analyzer?.progress().total ?? 0))
       startWatching()
       analyzer.kick()
+      loudness.kick()
       return { recoveredFrom: opened.recovered }
     }
     case 'folders': return folders()
@@ -336,10 +362,11 @@ async function handle(req: LibraryRequest): Promise<unknown> {
       return (db.prepare("select path from tracks where missing = 0 and album_id in (select value from json_each(?)) order by album_id, disc, track, path").all(JSON.stringify(req.albumIds)) as Array<{ path: string }>).map((r) => r.path)
     case 'artistPaths':
       return (db.prepare("select path from tracks where missing = 0 and (album_artist = ? or artist = ?) order by album collate nocase, disc, track, path limit 5000").all(req.artist, req.artist) as Array<{ path: string }>).map((r) => r.path)
-    case 'lyrics': return readLyrics(req.path)
+    case 'lyrics': return readLyrics(req.path, lyricsCacheFor(req.path))
     case 'home': return home()
     case 'stats': return stats()
-    case 'analysisProgress': return analyzer?.progress() ?? { done: 0, total: 0 }
+    case 'analysisProgress': return analysisState()
+    case 'duplicates': return duplicateGroups()
     case 'search': {
       const m = ftsQuery(req.query)
       if (!m) return []

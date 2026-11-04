@@ -180,3 +180,21 @@ Running the fetcher against archive.org for the first time (`E2E_NET=1 npx vites
 - Crossfade (Settings ▸ Playback): equal-power overlap on natural track changes; skip and seek never crossfade. Verified in the real app (hand-over 5.1 s after a seek with 6 s on vs 10.3 s off).
 - Fetch: audio quality (Best available / Lossless only / Compact MP3) for Internet Archive, Wikimedia Commons and Jamendo; every item needs a recognised free licence. ccMixter was tried and dropped (its server's responses stall Chromium and overflow Node's header limit).
 - Not implemented: see `docs/roadmap.md`.
+
+## v0.4.0 — output device, loudness, duplicates, lyrics, shortcuts, mini player, visualizer, reports
+
+- **Audio output device** picker (Settings ▸ Sound); follows device hot-plug.
+- **Loudness (LUFS) and dynamic range (DR)** columns, measured in the library worker.
+- **Duplicate finder** (Rail ▸ Duplicates): groups by audio fingerprint of tags and duration; extras go to the Trash, never hard-deleted.
+- **Lyrics from LRCLIB** (opt-in, cached on disk; synced lines when available).
+- **Custom keyboard shortcuts** (Settings ▸ Shortcuts), conflicts rejected, feeding the native menu.
+- **Queue undo and history** in the queue panel.
+- **Mini player** (View ▸ Mini Player): 320 px, tinted by the playing record, always on top.
+- **Visualizer** tab in the Vessel; spectrum is streamed only while the tab is open.
+- **Crash reports and Help ▸ Report a Problem…**: a local, redacted report you review before anything leaves the machine.
+- **ccMixter** added as a free source (CC-licensed, FLAC-filtered).
+  Not built: **Bandcamp** and **Free Music Archive** (no public API / terms disallow it); **Openverse** (duplicates existing providers and is mostly lossy).
+
+### Security (Shannon-style review)
+Entry points and trust boundaries were mapped and every finding was proven by a test ("no exploit, no report"). Fixed: SSRF bypasses in `isPrivateHost` (trailing-dot hosts, IPv4-mapped IPv6, `.lan`, bare names), ffmpeg protocol whitelisting for all inputs, IPC sender checks, and Electron fuses (RunAsNode, NODE_OPTIONS, inspect off). See `SECURITY.md` and `docs/security-review.md`.
+Open: Electron 33 is end-of-life (needs a major upgrade plus a better-sqlite3 rebuild), a DNS-rebinding race window in fetch, unsigned builds, Windows build not yet run.

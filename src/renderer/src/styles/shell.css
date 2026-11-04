@@ -141,3 +141,6 @@
 .row-btn { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 16px; border: 0; border-bottom: 1px solid var(--rule-2); background: none; color: var(--ink); padding: 0 8px; height: 48px; text-align: start; cursor: pointer; font: inherit; }
 .row-btn:hover { background: var(--hover); }
 .row-main { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+
+.set-select { font: inherit; background: var(--well); color: var(--ink); border: 1px solid var(--rule); padding: 6px 10px; min-width: 200px; max-width: 280px; }
+.set-select:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }

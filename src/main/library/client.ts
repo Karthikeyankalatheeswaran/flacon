@@ -24,7 +24,7 @@ function spawn(): UtilityProcess {
       onProgress(progress)
     } else if (m.event === 'changed') onChanged()
     else if (m.event === 'activity') onActivity()
-    else if (m.event === 'analysis' && m.progress) onAnalysis({ done: m.progress.done, total: m.progress.total })
+    else if (m.event === 'analysis' && m.progress) onAnalysis({ done: m.progress.done, total: m.progress.total, loud: m.progress.loud })
     else if (m.id !== undefined) {
       const w = pending.get(m.id)
       pending.delete(m.id)
@@ -62,7 +62,7 @@ export function startLibrary(handlers: { progress: (p: LibraryProgress) => void;
 }
 
 function ensureReady(): Promise<unknown> {
-  if (!initPromise) initPromise = send({ op: 'init', dbPath: join(app.getPath('userData'), 'library.db'), artDir: join(app.getPath('userData'), 'art'), ffmpeg: ffmpegPath })
+  if (!initPromise) initPromise = send({ op: 'init', dbPath: join(app.getPath('userData'), 'library.db'), artDir: join(app.getPath('userData'), 'art'), lyricsDir: lyricsDir(), ffmpeg: ffmpegPath })
   return initPromise
 }
 
@@ -70,6 +70,7 @@ export function call<T = unknown>(req: LibraryRequest): Promise<T> {
   return ensureReady().then(() => send<T>(req))
 }
 
+export const lyricsDir = (): string => join(app.getPath('userData'), 'lyrics')
 export const artDir = (): string => join(app.getPath('userData'), 'art')
 export function stopLibrary(): void {
   proc?.kill()

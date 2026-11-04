@@ -24,6 +24,8 @@ export interface Album {
   purity?: number | null
   /** Plain art URL; undefined/null when the album has no artwork. */
   artUrl?: string | null
+  /** Mean measured dynamic range (DR) of the album's tracks; null until measured. */
+  dr?: number | null
 }
 
 export const CD_LIMIT_KHZ = 22.05
@@ -115,7 +117,7 @@ export interface LibraryTrack {
 }
 
 export type LibraryRequest =
-  | { op: 'init'; dbPath: string; artDir: string; ffmpeg: string }
+  | { op: 'init'; dbPath: string; artDir: string; lyricsDir: string; ffmpeg: string }
   | { op: 'folders' }
   | { op: 'addFolder'; path: string }
   | { op: 'removeFolder'; path: string }
@@ -146,6 +148,7 @@ export type LibraryRequest =
   | { op: 'home' }
   | { op: 'stats' }
   | { op: 'analysisProgress' }
+  | { op: 'duplicates' }
 
 /** Convert a stored art filename into a URL served by the flacon-art:// protocol. */
 export const artUrl = (name: string): string => `flacon-art://art/${name}`
@@ -175,7 +178,7 @@ export function placeholderSleeve(tint: string): string {
 
 // ---- Songs table ----
 
-export const SONG_SORTS = ['title', 'artist', 'album', 'duration', 'quality', 'added', 'purity', 'plays', 'lastPlayed', 'rating', 'position'] as const
+export const SONG_SORTS = ['title', 'artist', 'album', 'duration', 'quality', 'added', 'purity', 'dr', 'plays', 'lastPlayed', 'rating', 'position'] as const
 export type SongSort = (typeof SONG_SORTS)[number]
 
 export interface SongsQuery {
@@ -224,8 +227,17 @@ export interface LibrarySong {
   gainDb: number | null
   /** ReplayGain track peak (linear), when tagged. */
   peak: number | null
+  /** Integrated loudness (LUFS) and dynamic range (DR), null until the background measurement reaches the file. */
+  lufs?: number | null
+  dr?: number | null
   /** Position inside a playlist (only for playlist scopes). */
   pos?: number
+}
+
+/** Tooltip text for the loudness cell: integrated LUFS and dynamic range, in words. */
+export function loudnessTitle(s: { lufs?: number | null; dr?: number | null }): string {
+  if (s.lufs == null && s.dr == null) return 'Loudness not measured yet'
+  return [s.lufs != null ? `${s.lufs.toFixed(1)} LUFS integrated loudness` : '', s.dr != null ? `DR ${Math.round(s.dr)} dynamic range (higher is more dynamic)` : ''].filter(Boolean).join(' · ')
 }
 
 export interface Playlist {
@@ -263,9 +275,9 @@ export interface StatsData {
   lossless: number
 }
 
-export interface AnalysisProgress { done: number; total: number }
+export interface AnalysisProgress { done: number; total: number; /** Loudness / DR measurement, which runs after purity. */ loud?: { done: number; total: number } }
 
-export interface Lyrics { synced: boolean; lines: Array<{ t: number | null; text: string }>; source: 'sidecar' | 'embedded' }
+export interface Lyrics { synced: boolean; lines: Array<{ t: number | null; text: string }>; source: 'sidecar' | 'embedded' | 'online' }
 
 export interface SongsPage {
   total: number
