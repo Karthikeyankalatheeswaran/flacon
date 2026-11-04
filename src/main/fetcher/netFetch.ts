@@ -44,26 +44,55 @@ const rawFetch: FetchFn = (url, init) =>
       resolve(new Response(null, { status, headers: { location: redirectUrl } }))
     })
     req.on('response', (incoming) => {
+      try {
       const res = incoming as typeof incoming & NodeJS.ReadableStream // Electron's IncomingMessage is a Readable at runtime; its typings omit pause/resume
       const headers = new Headers()
-      for (const [k, v] of Object.entries(res.headers)) headers.set(k, Array.isArray(v) ? v.join(', ') : String(v))
+      const encoded = Object.keys(res.headers).some((k) => k.toLowerCase() === 'content-encoding')
+      for (const [k, v] of Object.entries(res.headers)) {
+        // Chromium has already decoded the body, so these no longer describe it. (Audio downloads keep their real length.)
+        if (/^(content-encoding|transfer-encoding)$/i.test(k) || (encoded && k.toLowerCase() === 'content-length')) continue
+        // A server's odd header (ccMixter sends one the Headers class refuses) must not abort the whole response.
+        try { headers.set(k, Array.isArray(v) ? v.join(', ') : String(v)) } catch { /* skip it */ }
+      }
+      // Listen straight away (as Chromium's stream wants) and hand the chunks to the Response as they come.
+      let ctl!: ReadableStreamDefaultController<Uint8Array>
+      let closed = false
+      const queue: Uint8Array[] = []
+      let ready = false
+      const finish = (err?: Error): void => {
+        if (closed) return
+        closed = true
+        init.signal.removeEventListener('abort', abort)
+        if (!ready) { if (err) queue.push(err as unknown as Uint8Array); return }
+        err ? ctl.error(err) : ctl.close()
+      }
+      res.on('data', (b: Buffer) => {
+        const chunk = new Uint8Array(b)
+        if (ready) ctl.enqueue(chunk)
+        else queue.push(chunk)
+      })
+      res.on('end', () => finish())
+      res.on('error', (e: Error) => finish(e))
+      res.on('aborted', () => finish(new Error('Connection lost')))
       const body = new ReadableStream<Uint8Array>({
         start(c) {
-          res.on('data', (b: Buffer) => {
-            c.enqueue(new Uint8Array(b))
-          })
-          res.on('end', () => {
-            init.signal.removeEventListener('abort', abort)
-            c.close()
-          })
-          res.on('error', (e: Error) => c.error(e))
-          res.on('aborted', () => c.error(new Error('Connection lost')))
+          ctl = c
+          ready = true
+          let failed: Error | undefined
+          for (const q of queue) { if (q instanceof Error) failed = q; else c.enqueue(q) }
+          queue.length = 0
+          if (failed) { closed = true; c.error(failed) } else if (closed) c.close()
         },
         cancel() {
           req.abort()
         }
       })
       resolve(new Response(body, { status: res.statusCode, headers }))
+      } catch (e) {
+        init.signal.removeEventListener('abort', abort)
+        req.abort()
+        reject(e instanceof Error ? e : new Error('Bad response'))
+      }
     })
     req.on('error', (e) => {
       init.signal.removeEventListener('abort', abort)

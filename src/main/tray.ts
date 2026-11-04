@@ -1,6 +1,6 @@
 import { app, BrowserWindow, Menu, nativeImage, Tray } from 'electron'
 import type { PlaybackCommand, PlaybackState } from '@shared/playback'
-import { TRAY_ICON_PNG_BASE64 } from './trayIcon'
+import { TRAY_ICON_PNG_BASE64, TRAY_TEMPLATE_PNG_BASE64 } from './trayIcon'
 
 // Tray (Windows) / menu-bar extra (macOS): now-playing row, transport, Show Flacon, Quit.
 // Also the macOS Dock menu and the Windows taskbar thumbnail toolbar.
@@ -16,7 +16,13 @@ interface Deps {
 }
 
 function icon(): Electron.NativeImage {
-  // The full-colour app icon (not a template silhouette): it stays visible on light, dark and crowded menu bars.
+  if (process.platform === 'darwin') {
+    // Menu-bar standard: a monochrome template glyph the system tints for light/dark bars and highlights when open.
+    const t = nativeImage.createFromBuffer(Buffer.from(TRAY_TEMPLATE_PNG_BASE64, 'base64'), { scaleFactor: 2 })
+    t.setTemplateImage(true)
+    return t
+  }
+  // Windows: the full-colour app icon stays visible on light, dark and crowded taskbars.
   return nativeImage.createFromBuffer(Buffer.from(TRAY_ICON_PNG_BASE64, 'base64'), { scaleFactor: 2 })
 }
 

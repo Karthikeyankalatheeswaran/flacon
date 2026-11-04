@@ -43,6 +43,7 @@ export const AppSettingsSchema = z.object({
   islandSize: z.enum(['compact', 'comfortable']),
   islandArt: z.boolean(),
   islandBadge: z.boolean(),
+  islandStyle: z.enum(['water', 'ink', 'record', 'paper', 'aurora']),
   replayGain: z.enum(['off', 'track']),
   crossfade: z.number().int().min(0).max(10),
   showLyrics: z.boolean(),

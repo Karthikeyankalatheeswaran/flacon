@@ -228,3 +228,9 @@
 .report-note, .report-text { display: block; width: 100%; box-sizing: border-box; margin-top: 6px; padding: 10px 12px; font: inherit; color: var(--ink); background: var(--well); border: 1px solid var(--rule); border-radius: var(--radius-control); resize: vertical; user-select: text; }
 .report-text { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11.5px; line-height: 1.5; color: var(--ink-2); }
 .report-note:focus-visible, .report-text:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+
+/* Fetch: search ideas shown before the first search. */
+.fetch-ideas { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 12px; }
+.idea { font: inherit; font-size: 13px; color: var(--ink); background: transparent; border: 1px solid var(--rule); border-radius: var(--radius-touched); padding: 4px 12px; cursor: pointer; }
+.idea:hover { border-color: var(--ink-2); }
+.idea:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }

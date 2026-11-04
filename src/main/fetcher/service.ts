@@ -25,7 +25,9 @@ let manager: FetchManager | null = null
 let settings: FetchSettings = defaultFetchSettings
 let watcher: FSWatcher | null = null
 const limiter = new HostLimiter()
-let searchAbort: AbortController | null = null
+/** One in-flight search per source: a new search of the same source supersedes the old one, but sources never cancel each other (All sources runs them side by side). */
+const searchAborts = new Map<string, AbortController>()
+const SEARCH_TIMEOUT_MS = 20_000
 
 const settingsFile = (): string => join(app.getPath('userData'), 'fetch-settings.json')
 const libraryRoot = (): string => process.env['FLACON_IMPORT_DIR'] ?? join(app.getPath('music'), 'Flacon') // env override is for tests only
@@ -81,13 +83,20 @@ export function setFetchSettings(next: FetchSettings): FetchSettings {
 }
 
 export async function fetchSearch(provider: keyof typeof PROVIDERS, query: string, quality?: Quality): Promise<SearchResponse> {
-  searchAbort?.abort()
-  searchAbort = new AbortController()
+  searchAborts.get(provider)?.abort()
+  const ac = new AbortController()
+  searchAborts.set(provider, ac)
+  let timedOut = false
+  const timer = setTimeout(() => { timedOut = true; ac.abort() }, SEARCH_TIMEOUT_MS)
   try {
-    return { ok: true, results: await PROVIDERS[provider].search(query, ctx(searchAbort.signal, quality)) }
+    return { ok: true, results: await PROVIDERS[provider].search(query, ctx(ac.signal, quality)) }
   } catch (e) {
-    if (searchAbort.signal.aborted) return { ok: true, results: [] } // superseded by a newer search
+    if (timedOut) return { ok: false, error: `${PROVIDERS[provider].name} didn’t answer in time. Try again.` }
+    if (ac.signal.aborted) return { ok: true, results: [] } // superseded by a newer search
     return { ok: false, error: errMsg(e) }
+  } finally {
+    clearTimeout(timer)
+    if (searchAborts.get(provider) === ac) searchAborts.delete(provider)
   }
 }
 

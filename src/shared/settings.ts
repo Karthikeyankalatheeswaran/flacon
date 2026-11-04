@@ -40,6 +40,8 @@ export const SettingsSchema = z.object({
   islandSize: z.enum(['compact', 'comfortable']).catch('comfortable'),
   islandArt: z.boolean().catch(true),
   islandBadge: z.boolean().catch(true),
+  /** Island look: rolling water (default), flat black ink, tinted by the record, paper-light, or a slow aurora of the record's colour. */
+  islandStyle: z.enum(['water', 'ink', 'record', 'paper', 'aurora']).catch('water'),
   replayGain: z.enum(['off', 'track']).catch('off'),
   /** Seconds of overlap between tracks; 0 = gapless without a fade. */
   crossfade: z.number().int().min(0).max(10).catch(0),

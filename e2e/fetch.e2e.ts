@@ -27,6 +27,7 @@ describe.skipIf(!net)('fetcher, real network', () => {
 
   it('searches, downloads, verifies, imports and indexes a licensed FLAC', async () => {
     await page.getByRole('button', { name: /^Fetch/ }).first().click()
+    await page.getByRole('tab', { name: 'Internet Archive' }).click()
     await page.getByLabel('Search Internet Archive').fill('Charleston Fox Trot 1925')
     await page.getByRole('button', { name: 'Search' }).click()
     const hit = page.getByRole('list', { name: 'Results' }).getByRole('listitem').filter({ hasText: /Charleston \(Fox Trot\)/ }).first()
@@ -50,6 +51,7 @@ describe.skipIf(!net)('fetcher, real network', () => {
 
   it('searches accurately: every word matters, lossless-only lists only FLAC/WAV, and each hit says what it holds', async () => {
     await page.getByRole('button', { name: /^Fetch/ }).first().click()
+    await page.getByRole('tab', { name: 'Internet Archive' }).click()
     const search = async (q: string, quality: 'Best available' | 'Lossless only' | 'Compact (MP3)'): Promise<string[]> => {
       await page.getByRole('radio', { name: quality }).click()
       await page.getByLabel('Search Internet Archive').fill(q)
@@ -64,5 +66,28 @@ describe.skipIf(!net)('fetcher, real network', () => {
     expect(moon.length).toBeGreaterThan(0)
     expect(moon[0]!.toLowerCase()).toMatch(/moonlight/) // the top hit is about the thing typed, not noise
     for (const t of moon.slice(0, 5)) expect(t.toLowerCase()).toMatch(/moonlight|beethoven|sonata/)
+  }, 120_000)
+})
+
+describe.skipIf(!net)('fetcher, all sources', () => {
+  it('searches every source at once and labels where each hit came from', async () => {
+    const root2 = mkdtempSync(join(tmpdir(), 'flacon-fetch-all-'))
+    const app = await electron.launch({ args: [resolve('out/main/index.js'), `--user-data-dir=${join(root2, 'ud')}`], env: { ...process.env, FLACON_IMPORT_DIR: join(root2, 'imports') } as Record<string, string>, timeout: 45_000 })
+    try {
+      for (let i = 0; i < 100 && !app.windows().some((w) => w.url().endsWith('/index.html')); i++) await new Promise((r) => setTimeout(r, 200))
+      const page = app.windows().find((w) => w.url().endsWith('/index.html'))!
+      await page.getByRole('dialog', { name: /welcome/i }).waitFor()
+      await page.keyboard.press('Escape')
+      await page.getByRole('button', { name: /^Fetch/ }).first().click()
+      await page.getByRole('group', { name: 'Search ideas' }).getByRole('button', { name: 'Bach' }).click()
+      const list = page.getByRole('list', { name: 'Results' })
+      await list.waitFor({ timeout: 45_000 })
+      const texts = await list.getByRole('listitem').allInnerTexts()
+      expect(texts.length).toBeGreaterThan(2)
+      expect(texts.some((t) => /Internet Archive|Wikimedia Commons|ccMixter/.test(t))).toBe(true)
+    } finally {
+      await app.close().catch(() => undefined)
+      rmSync(root2, { recursive: true, force: true })
+    }
   }, 120_000)
 })

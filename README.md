@@ -198,3 +198,9 @@ Running the fetcher against archive.org for the first time (`E2E_NET=1 npx vites
 ### Security (Shannon-style review)
 Entry points and trust boundaries were mapped and every finding was proven by a test ("no exploit, no report"). Fixed: SSRF bypasses in `isPrivateHost` (trailing-dot hosts, IPv4-mapped IPv6, `.lan`, bare names), ffmpeg protocol whitelisting for all inputs, IPC sender checks, and Electron fuses (RunAsNode, NODE_OPTIONS, inspect off). See `SECURITY.md` and `docs/security-review.md`.
 Open: a DNS-rebinding race window in fetch, unsigned builds, Windows build not yet run.
+
+## v0.4.1
+- **macOS menu-bar icon** is now a monochrome flask template image that the system tints for light and dark menu bars (Windows keeps the colour icon).
+- **Island styles** (Settings ▸ Flacon Island ▸ Style): Water (the original), Ink, Record (tinted by the playing record), Paper, Aurora.
+- **Fetch**: new default **All sources** tab searching Internet Archive, Wikimedia Commons, ccMixter (and Jamendo with a client ID) in parallel, lossless first, with search ideas on an empty page.
+  Fixed: ccMixter searches stalled forever because one of its response headers aborted Flacon's response handler; every search now also times out after 20 s, and sources no longer cancel each other.

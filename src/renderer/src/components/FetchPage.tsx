@@ -6,6 +6,7 @@ import { tabKeys } from '@/lib/a11y'
 import { useStore } from '@/store'
 
 const PROVIDERS = [
+  { id: 'all', name: 'All sources', placeholder: 'Search every free source at once (e.g. Bach, jazz, Charleston 1925)', blurb: 'Searches the Internet Archive, Wikimedia Commons, ccMixter and Jamendo (if you added a client ID) together, lossless results first. Only items with a clear licence are listed.' },
   { id: 'archive', name: 'Internet Archive', placeholder: 'Search public-domain and Creative Commons albums', blurb: 'Public-domain and Creative Commons audio: FLAC where an item has it, MP3 or Ogg otherwise. Only items with a clear licence are listed.' },
   { id: 'commons', name: 'Wikimedia Commons', placeholder: 'Search free recordings (e.g. Bach, rain, brass band)', blurb: 'Free-licence recordings from Wikimedia Commons: classical, field recordings, public domain. Mostly Ogg Vorbis, with FLAC and WAV when uploaded.' },
   { id: 'ccmixter', name: 'ccMixter', placeholder: 'Search Creative Commons remixes and samples', blurb: 'Creative Commons remixes, samples and a cappellas. Mostly MP3, with FLAC or WAV when the artist uploaded it.' },
@@ -13,6 +14,7 @@ const PROVIDERS = [
   { id: 'link', name: 'Paste link', placeholder: 'https://…/album.zip', blurb: 'A direct link to a FLAC or WAV file, or a ZIP of them, such as a purchase download. The link must work on its own: nothing is bypassed.' }
 ] as const
 type PId = (typeof PROVIDERS)[number]['id']
+const IDEAS = ['Bach', 'jazz 1920s', 'Charleston', 'ambient', 'piano', 'field recording', 'brass band']
 const QUALITY: Array<{ id: Quality; label: string; hint: string }> = [
   { id: 'best', label: 'Best available', hint: 'Lossless where the source has it, otherwise the best lossy file.' },
   { id: 'lossless', label: 'Lossless only', hint: 'FLAC / WAV only. Sources without lossless files list nothing.' },
@@ -56,7 +58,7 @@ function JobRow({ j }: { j: FetchJob }): JSX.Element {
 
 export function FetchPage(): JSX.Element {
   const jobs = useStore((s) => s.fetchJobs)
-  const [prov, setProv] = useState<PId>('archive')
+  const [prov, setProv] = useState<PId>('all')
   const [query, setQuery] = useState('')
   const [state, setState] = useState<{ kind: 'idle' } | { kind: 'loading' } | { kind: 'error'; message: string } | { kind: 'results'; hits: SearchHit[] }>({ kind: 'idle' })
   const [adding, setAdding] = useState<string | null>(null)
@@ -68,12 +70,28 @@ export function FetchPage(): JSX.Element {
 
   useEffect(() => void bridge.fetchSettings().then(setSettings), [])
 
-  const search = async (): Promise<void> => {
-    if (!query.trim()) return
+  const search = async (q0?: string): Promise<void> => {
+    const q = (q0 ?? query).trim()
+    if (!q) return
+    if (q0) setQuery(q0)
     const t = ++token.current
     setState({ kind: 'loading' })
     setNotice(null)
-    const r = await bridge.fetchSearch({ provider: prov, query: query.trim(), quality })
+    if (prov === 'all') {
+      const ids: Array<'archive' | 'commons' | 'ccmixter' | 'jamendo'> = ['archive', 'commons', 'ccmixter']
+      if (settings.jamendoClientId) ids.push('jamendo')
+      const rs = await Promise.all(ids.map((id) => bridge.fetchSearch({ provider: id, query: q, quality }).catch(() => ({ ok: false as const, error: 'Search failed' }))))
+      if (t !== token.current) return
+      const hits = rs.flatMap((r) => (r.ok ? r.results : []))
+      // Lossless first, then the order each source ranked them in (stable).
+      const rank = (h: SearchHit): number => (/FLAC|WAV/.test(h.quality ?? '') ? 0 : 1)
+      hits.sort((a, b) => rank(a) - rank(b))
+      const failed = rs.filter((r) => !r.ok).length
+      setState(hits.length === 0 && failed === rs.length ? { kind: 'error', message: 'No source could be reached. Check your connection and try again.' } : { kind: 'results', hits })
+      if (hits.length > 0 && failed > 0) setNotice({ ok: false, text: `${failed} of ${rs.length} sources didn’t answer; showing the rest.` })
+      return
+    }
+    const r = await bridge.fetchSearch({ provider: prov, query: q, quality })
     if (t !== token.current) return // a newer search superseded this one
     setState(r.ok ? { kind: 'results', hits: r.results } : { kind: 'error', message: r.error })
   }
@@ -107,6 +125,12 @@ export function FetchPage(): JSX.Element {
           <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={p.placeholder} aria-label={`Search ${p.name}`} spellCheck={false} />
           <button type="submit" className="primary" disabled={!query.trim() || state.kind === 'loading'}>{prov === 'link' ? 'Check link' : 'Search'}</button>
         </form>
+        {state.kind === 'idle' && prov !== 'link' && (
+          <div className="fetch-ideas" role="group" aria-label="Search ideas">
+            <span className="t-label ink-2">Try</span>
+            {IDEAS.map((i) => <button key={i} type="button" className="idea" onClick={() => void search(i)}>{i}</button>)}
+          </div>
+        )}
         {prov !== 'link' && (
           <div className="quality" role="radiogroup" aria-label="Audio quality">
             <span className="t-label ink-2">Audio quality</span>
@@ -152,7 +176,7 @@ export function FetchPage(): JSX.Element {
                 <li key={h.id} className="hit">
                   <div className="job-main">
                     <span className="ell" dir="auto" style={{ fontWeight: 600 }}>{h.title}</span>
-                    <span className="t-label ink-2 ell" dir="auto">{h.artist}</span>
+                    <span className="t-label ink-2 ell" dir="auto">{[h.artist, prov === 'all' ? PROVIDERS.find((x) => x.id === h.provider)?.name : ''].filter(Boolean).join(' · ')}</span>
                   </div>
                   {h.quality && <span className="t-label hit-q" data-lossless={/FLAC|WAV/.test(h.quality) ? '' : undefined}>{h.quality}</span>}
                   <span className="t-label ink-2" title={h.license?.attribution}>{h.license?.name}</span>

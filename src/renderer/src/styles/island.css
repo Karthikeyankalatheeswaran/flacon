@@ -49,3 +49,25 @@ html, body, #root { background: transparent; }
 
 .isl-close { width: 26px; height: 26px; color: rgb(237 237 232 / .6); }
 .isl-close:hover { color: #fff; }
+
+/* Styles. "water" is the base look above. Each of the others recolours through the same few tokens and drops the water. */
+.isl { --isl-bg: #000; --isl-ink: #ededE8; --isl-ink-2: rgb(237 237 232 / .62); --isl-btn: rgb(237 237 232 / .85); --isl-hover: rgb(237 237 232 / .14); --isl-big-bg: #ededE8; --isl-big-ink: #111211; --isl-on: #ff9a70; background: var(--isl-bg); color: var(--isl-ink); transition: background-color 600ms ease-in-out; }
+.isl-sub, .isl-kicker, .isl-scrub { color: var(--isl-ink-2); }
+.isl-btn { color: var(--isl-btn); }
+.isl-btn:hover { background: var(--isl-hover); color: var(--isl-ink); }
+.isl-btn.on { color: var(--isl-on); }
+.isl-btn.big { background: var(--isl-big-bg); color: var(--isl-big-ink); }
+.isl-btn.big:hover { background: var(--isl-ink); color: var(--isl-big-ink); }
+.isl-scrub input { accent-color: var(--isl-ink); }
+.isl-close, .isl-close:hover { color: var(--isl-ink-2); }
+.isl-bars i { background: var(--isl-ink); }
+.isl-btn:focus-visible, .isl-art:focus-visible { outline-color: var(--isl-ink); }
+/* Record: the record's own colour, chalk text. */
+.isl[data-style='record'], .isl[data-style='aurora'] { --isl-bg: var(--isl-tint, #13303a); }
+/* Aurora: the record's colour with a slow, soft light drifting across it. */
+.isl[data-style='aurora']::before { content: ''; position: absolute; inset: -40%; pointer-events: none; background: radial-gradient(40% 50% at 30% 40%, rgb(255 255 255 / .22), transparent 70%), radial-gradient(35% 45% at 75% 65%, rgb(255 255 255 / .12), transparent 70%); animation: isl-drift 14s ease-in-out infinite alternate; }
+@keyframes isl-drift { from { transform: translate(-8%, -4%) rotate(0deg); } to { transform: translate(8%, 5%) rotate(18deg); } }
+@media (prefers-reduced-motion: reduce) { .isl[data-style='aurora']::before { animation: none; } }
+/* Paper: light chalk pill with dark ink. */
+.isl[data-style='paper'] { --isl-bg: #ededE8; --isl-ink: #111211; --isl-ink-2: rgb(17 18 17 / .68); --isl-btn: rgb(17 18 17 / .8); --isl-hover: rgb(17 18 17 / .1); --isl-big-bg: #111211; --isl-big-ink: #ededE8; --isl-on: #c2410c; box-shadow: 0 0 0 .5px rgb(0 0 0 / .16), 0 10px 30px rgb(0 0 0 / .22); }
+.isl[data-style='paper'] .isl-msg, .isl[data-style='paper'] .isl-warn { color: #b3261e; }

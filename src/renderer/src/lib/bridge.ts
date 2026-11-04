@@ -149,7 +149,7 @@ export const bridge: FlaconBridge = window.flacon ?? mockBridge()
 let mockUpdate: UpdateStatus = { state: 'idle' }
 const updateSubs = new Set<(s: UpdateStatus) => void>()
 const mockFolders = ['/Users/you/Music/Flacon', '/Volumes/Archive/Lossless']
-const mockSettings: AppSettingsInfo = { launchAtLogin: false, pauseOnSuspend: true, updateChecks: true, islandEdge: 'top', islandAlign: 'center', outputDevice: '', onboarded: false, islandEnabled: true, islandMode: 'always', islandSize: 'comfortable', islandArt: true, islandBadge: true, replayGain: 'off', crossfade: 0, showLyrics: false, lyricsOnline: false, shortcuts: {}, recovered: false, canLaunchAtLogin: true, platform: 'darwin' }
+const mockSettings: AppSettingsInfo = { islandStyle: 'water', launchAtLogin: false, pauseOnSuspend: true, updateChecks: true, islandEdge: 'top', islandAlign: 'center', outputDevice: '', onboarded: false, islandEnabled: true, islandMode: 'always', islandSize: 'comfortable', islandArt: true, islandBadge: true, replayGain: 'off', crossfade: 0, showLyrics: false, lyricsOnline: false, shortcuts: {}, recovered: false, canLaunchAtLogin: true, platform: 'darwin' }
 const settingsSubs = new Set<(s: AppSettingsInfo) => void>()
 const activitySubs = new Set<() => void>()
 

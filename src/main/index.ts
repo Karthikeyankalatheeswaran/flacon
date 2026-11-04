@@ -128,7 +128,7 @@ function settingsInfo(): AppSettingsInfo {
   const s = settings.get()
   return {
     launchAtLogin: s.launchAtLogin, pauseOnSuspend: s.pauseOnSuspend, updateChecks: s.updateChecks, islandEdge: s.islandEdge, islandAlign: s.islandAlign, outputDevice: s.outputDevice, onboarded: s.onboarded,
-    islandEnabled: s.islandEnabled, islandMode: s.islandMode, islandSize: s.islandSize, islandArt: s.islandArt, islandBadge: s.islandBadge, replayGain: s.replayGain, crossfade: s.crossfade, showLyrics: s.showLyrics, lyricsOnline: s.lyricsOnline, shortcuts: s.shortcuts,
+    islandEnabled: s.islandEnabled, islandMode: s.islandMode, islandSize: s.islandSize, islandArt: s.islandArt, islandBadge: s.islandBadge, islandStyle: s.islandStyle, replayGain: s.replayGain, crossfade: s.crossfade, showLyrics: s.showLyrics, lyricsOnline: s.lyricsOnline, shortcuts: s.shortcuts,
     recovered: settings.recoveredFrom !== null, canLaunchAtLogin: app.isPackaged, platform: process.platform as AppState['platform']
   }
 }

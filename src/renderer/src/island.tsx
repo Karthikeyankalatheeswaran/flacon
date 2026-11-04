@@ -18,6 +18,8 @@ const SPRING = { type: 'spring', stiffness: 380, damping: 30, mass: 1 } as const
 // The island is always black, so tier colours are fixed light tones rather than the theme's.
 const TIER_ON_BLACK: Record<PurityTier, string> = { pure: '#8fe0b0', good: '#b9d98a', limited: '#f0c46a', thin: '#ff9a7a' }
 
+const TIER_ON_PAPER: Record<PurityTier, string> = { pure: '#0b6b3a', good: '#4a6a14', limited: '#8a5a00', thin: '#b3261e' }
+
 function Bars({ on }: { on: boolean }): JSX.Element {
   return <span className={`isl-bars${on ? ' on' : ''}`} aria-hidden><i /><i /><i /></span>
 }
@@ -50,6 +52,7 @@ function Island(): JSX.Element | null {
   const size = cfg?.islandSize ?? 'comfortable'
   const showArt = cfg?.islandArt ?? true
   const showBadge = cfg?.islandBadge ?? true
+  const style = cfg?.islandStyle ?? 'water'
   const onlyWhenPlaying = cfg?.islandMode === 'playing'
 
   // Idle with nothing loaded shrinks to the dot (or vanishes in "While playing" mode); a loaded track rests as the pill.
@@ -118,7 +121,7 @@ function Island(): JSX.Element | null {
     </button>
   )
   const badge = meta && showBadge && meta.lossless ? purityBadge(meta) : ''
-  const badgeColor = meta?.purity != null ? TIER_ON_BLACK[purityTier(meta.purity)] : 'rgb(237 237 232 / .62)'
+  const badgeColor = meta?.purity != null ? (style === 'paper' ? TIER_ON_PAPER : TIER_ON_BLACK)[purityTier(meta.purity)] : 'var(--isl-ink-2)'
   const sub = np ? [meta?.artist, np.bitDepth ? `${np.bitDepth} bit` : '', `${(np.sampleRate / 1000).toString()} kHz`, np.codec.toUpperCase()].filter(Boolean).join(' · ') : ''
 
   const closeBtn = (
@@ -149,6 +152,8 @@ function Island(): JSX.Element | null {
         aria-label="Now playing island"
         aria-live={st === 'error' ? 'assertive' : 'off'}
         className={`isl isl-${st}`}
+        data-style={style}
+        style={{ ['--isl-tint' as string]: tint }}
         initial={false}
         animate={{ width: g.w, height: g.h, borderRadius: g.r }}
         transition={reduce ? { duration: 0.15 } : SPRING}
@@ -172,7 +177,7 @@ function Island(): JSX.Element | null {
         ) : (
           <>
             {/* Water in the flask: the level rises with playback and the surface keeps rolling. */}
-            {np && st !== 'error' && (
+            {np && st !== 'error' && style === 'water' && (
               <div className="isl-water" aria-hidden data-empty={!dur || shown / dur < 0.02 ? '' : undefined} style={{ ['--p' as string]: dur ? Math.min(1, shown / dur) : 0 }}>
                 <i className="isl-wave back" />
                 <i className="isl-wave" />

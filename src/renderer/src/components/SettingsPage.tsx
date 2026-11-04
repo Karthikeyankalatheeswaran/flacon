@@ -106,6 +106,9 @@ export function SettingsPage(): JSX.Element {
               <Row label="When to show" hint="“While playing” hides it until a song is loaded.">
                 <Seg label="When to show the island" value={settings?.islandMode ?? 'always'} options={[['always', 'Always'], ['playing', 'While playing']]} onChange={(v) => void update({ islandMode: v })} />
               </Row>
+              <Row label="Style">
+                <Seg label="Island style" value={settings?.islandStyle ?? 'water'} options={[['water', 'Water'], ['ink', 'Ink'], ['record', 'Record'], ['paper', 'Paper'], ['aurora', 'Aurora']]} onChange={(v) => void update({ islandStyle: v })} />
+              </Row>
               <Row label="Size">
                 <Seg label="Island size" value={settings?.islandSize ?? 'comfortable'} options={[['compact', 'Compact'], ['comfortable', 'Comfortable']]} onChange={(v) => void update({ islandSize: v })} />
               </Row>
