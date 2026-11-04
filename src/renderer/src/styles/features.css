@@ -92,7 +92,7 @@
 .vessel-vol input { flex: 1; }
 .vol-read { min-width: 44px; text-align: end; }
 .vessel-tabs { display: flex; align-items: center; gap: 4px; margin-top: 12px; border-bottom: 1px solid color-mix(in srgb, var(--v-ink) 14%, transparent); flex-shrink: 0; }
-.vtab { display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 10px 0 0; margin-right: 8px; border: 0; background: none; color: color-mix(in srgb, var(--v-ink) 72%, transparent); font-size: 13px; cursor: pointer; box-shadow: inset 0 -2px 0 transparent; }
+.vtab { display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 8px 0 0; margin-right: 4px; white-space: nowrap; border: 0; background: none; color: color-mix(in srgb, var(--v-ink) 72%, transparent); font-size: 13px; cursor: pointer; box-shadow: inset 0 -2px 0 transparent; }
 .vtab[aria-selected='true'] { color: var(--v-strong); font-weight: 650; box-shadow: inset 0 -2px 0 var(--v-ink); }
 .vessel-panel { flex: 1; min-height: 120px; display: flex; flex-direction: column; overflow: hidden; }
 .panel-empty { padding: 20px 0; }
@@ -234,3 +234,11 @@
 .idea { font: inherit; font-size: 13px; color: var(--ink); background: transparent; border: 1px solid var(--rule); border-radius: var(--radius-touched); padding: 4px 12px; cursor: pointer; }
 .idea:hover { border-color: var(--ink-2); }
 .idea:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+
+/* Only the open tab shows its name; the others are icons (their names stay for screen readers and tooltips). */
+.vtab[aria-selected='false'] .vtab-l { display: none; }
+.vtab[aria-selected='false'] { padding-right: 10px; }
+
+/* Queue rows: the purity meter and the time sit in fixed columns so every row lines up. */
+.qmeta { display: inline-flex; align-items: center; justify-content: flex-end; gap: 8px; }
+.qtime { display: inline-block; min-width: 6ch; text-align: right; font-variant-numeric: tabular-nums; }

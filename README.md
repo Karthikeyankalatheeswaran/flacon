@@ -204,3 +204,9 @@ Open: a DNS-rebinding race window in fetch, unsigned builds, Windows build not y
 - **Island styles** (Settings ▸ Flacon Island ▸ Style): Water (the original), Ink, Record (tinted by the playing record), Paper, Aurora.
 - **Fetch**: new default **All sources** tab searching Internet Archive, Wikimedia Commons, ccMixter (and Jamendo with a client ID) in parallel, lossless first, with search ideas on an empty page.
   Fixed: ccMixter searches stalled forever because one of its response headers aborted Flacon's response handler; every search now also times out after 20 s, and sources no longer cancel each other.
+
+## v0.4.2
+- **Island**: every style except Water now rests as a small white dot at the top and opens when you point at it. Each style has its own motion: Ink (ink bloom and drifting smoke), Record (a spinning vinyl disc), Paper (sheet unrolls, ruled lines drift, a pencil line draws progress), Aurora (three drifting, hue-shifting lights). Animations pause when playback pauses and stop under "Reduce motion".
+- **Player column** on the right appears only once something has been played, queued or restored from last time; a fresh launch shows no empty player.
+- **Alignment**: tabs (Fetch, player panel) no longer wrap their names, switches are real toggles flush with the row edge, queue times sit in a fixed column.
+- Accessibility: queue row buttons now expose their visible text in their accessible name.

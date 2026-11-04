@@ -65,14 +65,15 @@ export function QueuePanel(): JSX.Element {
                 onDragLeave={() => setOver((o) => (o === v.index ? null : o))}
                 onDrop={(e) => { e.preventDefault(); if (from !== null && from !== v.index) send({ type: 'move', from, to: v.index }); setFrom(null); setOver(null) }}
                 onDragEnd={() => { setFrom(null); setOver(null) }}>
-                <button type="button" className="qmain" onClick={() => send({ type: 'jump', index: v.index })} aria-label={`Play ${it.title}`} aria-current={now ? 'true' : undefined}>
+                <button type="button" className="qmain" onClick={() => send({ type: 'jump', index: v.index })} aria-current={now ? 'true' : undefined}>
+                  <span className="sr-only">Play </span>
                   <i className="qth" style={{ background: it.artUrl ? `url("${it.artUrl}") center/cover` : 'color-mix(in srgb, var(--v-ink) 14%, transparent)' }}>{now && <span className="qnow"><Icon name={status === 'playing' ? 'waveform' : 'pause'} size={16} /></span>}</i>
                   <span className="qtext">
                     <span className="ell" dir="auto" style={{ fontWeight: now ? 650 : 500 }}>{it.title}</span>
                     <span className="ell t-label dim" dir="auto">{it.artist || '—'}</span>
                   </span>
                 </button>
-                <span className="qmeta t-label dim"><PurityMeter f={it} width={28} label={false} />{it.durationSec ? timecode(it.durationSec) : ''}</span>
+                <span className="qmeta t-label dim"><PurityMeter f={it} width={28} label={false} /><span className="qtime">{it.durationSec ? timecode(it.durationSec) : ''}</span></span>
                 <button type="button" className="qx" aria-label={`Remove ${it.title} from the queue`} onClick={() => send({ type: 'remove', index: v.index })}><Icon name="close" size={14} /></button>
               </div>
             )

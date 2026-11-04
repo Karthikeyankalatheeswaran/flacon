@@ -108,9 +108,9 @@ export function Vessel({ over }: { over: boolean }): JSX.Element {
       </div>
       <div className="vessel-tabs">
         <div role="tablist" aria-label="Panel" style={{ display: 'flex' }}>
-          <button type="button" role="tab" className="vtab" aria-selected={vesselTab === 'queue'} onClick={() => setVesselTab('queue')}><Icon name="queue" size={16} /> Up next</button>
-          <button type="button" role="tab" className="vtab" aria-selected={vesselTab === 'lyrics'} onClick={() => setVesselTab('lyrics')}><Icon name="lyrics" size={16} /> Lyrics</button>
-          <button type="button" role="tab" className="vtab" aria-selected={vesselTab === 'viz'} onClick={() => setVesselTab('viz')}><Icon name="equalizer" size={16} /> Visualizer</button>
+          <button type="button" role="tab" className="vtab" aria-selected={vesselTab === 'queue'} aria-label="Up next" title="Up next" onClick={() => setVesselTab('queue')}><Icon name="queue" size={16} /><span className="vtab-l">Up next</span></button>
+          <button type="button" role="tab" className="vtab" aria-selected={vesselTab === 'lyrics'} aria-label="Lyrics" title="Lyrics" onClick={() => setVesselTab('lyrics')}><Icon name="lyrics" size={16} /><span className="vtab-l">Lyrics</span></button>
+          <button type="button" role="tab" className="vtab" aria-selected={vesselTab === 'viz'} aria-label="Visualizer" title="Visualizer" onClick={() => setVesselTab('viz')}><Icon name="equalizer" size={16} /><span className="vtab-l">Visualizer</span></button>
         </div>
         <span style={{ marginLeft: 'auto', display: 'flex', gap: 4 }}>
           <button type="button" className={`vbtn${eqOpen ? ' lit' : ''}`} style={{ width: 32, height: 32 }} aria-label="Equalizer" aria-pressed={eqOpen} title={`Equalizer${pb.eq.enabled ? ' (on)' : ''}`} onClick={() => setEqOpen(!eqOpen)}><Icon name="eq" size={18} /></button>

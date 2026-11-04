@@ -144,6 +144,8 @@ function mockBridge(): FlaconBridge {
 }
 
 export const bridge: FlaconBridge = window.flacon ?? mockBridge()
+// Browser preview only (no Electron): lets a developer drive the mock, e.g. to flip island styles.
+if (!window.flacon) (window as unknown as { __mock?: FlaconBridge }).__mock = bridge
 
 
 let mockUpdate: UpdateStatus = { state: 'idle' }

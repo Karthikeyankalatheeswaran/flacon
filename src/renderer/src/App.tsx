@@ -35,11 +35,13 @@ export function App(): JSX.Element {
   const setTheme = useStore((s) => s.setTheme)
   const scanning = useStore((s) => s.progress.phase === 'scanning')
   const eqOpen = useStore((s) => s.eqOpen)
+  // The player on the right only exists once something has been played, queued or restored from last time.
+  const hasPlayer = useStore((s) => !!s.pb.track || s.pb.queueLength > 0)
   const page = useStore((s) => s.page)
   const [over, setOver] = useState(false)
   const [tab, setTab] = useState<Tab>('Albums')
   const shellRef = useRef<HTMLDivElement>(null)
-  const vesselLeft = (): number => (shellRef.current?.getBoundingClientRect().right ?? 0) - 336
+  const vesselLeft = (): number => (shellRef.current?.getBoundingClientRect().right ?? 0) - (hasPlayer ? 336 : 0)
 
   const searchRef = useRef<HTMLInputElement>(null)
   const send = useStore((s) => s.send)
@@ -95,7 +97,7 @@ export function App(): JSX.Element {
   const empty = libraryLoaded && albums.length === 0
 
   return (
-    <div className="shell" ref={shellRef}>
+    <div className="shell" ref={shellRef} style={hasPlayer ? undefined : ({ ["--shell-vessel" as string]: "0px" })}>
       <a className="skip" href="#content" onClick={(e) => { e.preventDefault(); document.getElementById('content')?.focus() }}>Skip to content</a>
       <Rail />
       <main className="main" id="content" tabIndex={-1}>
@@ -181,7 +183,7 @@ export function App(): JSX.Element {
         </>
         )}
       </main>
-      <Vessel over={over} />
+      {hasPlayer && <Vessel over={over} />}
       {eqOpen && <EqPanel />}
       <Onboarding />
       <ContextMenu />

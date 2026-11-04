@@ -49,6 +49,8 @@ describe('axe audit', () => {
   afterAll(() => { if (found.length) console.log('AXE VIOLATIONS\n' + found.join('\n')) })
   it('first-run welcome dialog', async () => {
     await page.getByRole('dialog', { name: /welcome/i }).waitFor()
+    // Nothing played yet: the player column is not shown at all.
+    expect(await page.locator('aside.vessel').count()).toBe(0)
     await audit('onboarding')
     await page.keyboard.press('Escape')
     await page.getByRole('dialog', { name: /welcome/i }).waitFor({ state: 'detached' })
@@ -76,6 +78,8 @@ describe('axe audit', () => {
       await page.waitForTimeout(400)
       await audit(`listening/${theme}`)
       await page.getByRole('button', { name: 'Library', exact: true }).first().click()
+      // The player on the right only appears once something has been played, so start a song first.
+      await page.evaluate(`window.flacon.librarySongs({ sort: 'title', dir: 'asc', text: '', offset: 0, limit: 50 }).then((r) => window.flacon.libraryPlay({ source: { kind: 'paths', paths: r.rows.map((x) => x.path) }, mode: 'play', index: 0 }))`)
       await page.getByRole('tab', { name: 'Visualizer' }).click()
       await page.waitForTimeout(400)
       await audit(`visualizer/${theme}`)

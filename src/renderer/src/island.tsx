@@ -61,9 +61,10 @@ function Island(): JSX.Element | null {
     if (onlyWhenPlaying && !hasTrack) dispatch({ type: 'hide' })
     else {
       dispatch({ type: 'show' })
-      dispatch({ type: 'rest', rest: restFor(hasTrack) })
+      // Water rests as the pill; every other style rests as a small white dot that opens when you point at it.
+      dispatch({ type: 'rest', rest: restFor(hasTrack && style === 'water') })
     }
-  }, [hasTrack, onlyWhenPlaying])
+  }, [hasTrack, onlyWhenPlaying, style])
 
   // A new track announces itself briefly (never over an expanded island: the reducer ignores it).
   const path = np?.path
@@ -153,7 +154,8 @@ function Island(): JSX.Element | null {
         aria-live={st === 'error' ? 'assertive' : 'off'}
         className={`isl isl-${st}`}
         data-style={style}
-        style={{ ['--isl-tint' as string]: tint }}
+        data-playing={playing}
+        style={{ ['--isl-tint' as string]: tint, ['--p' as string]: dur ? Math.min(1, shown / dur) : 0 }}
         initial={false}
         animate={{ width: g.w, height: g.h, borderRadius: g.r }}
         transition={reduce ? { duration: 0.15 } : SPRING}
@@ -183,6 +185,8 @@ function Island(): JSX.Element | null {
                 <i className="isl-wave" />
               </div>
             )}
+            {/* Every other style has its own moving layer, which also plays its own entrance each time the island opens. */}
+            {style !== 'water' && st !== 'error' && <div className="isl-fx" key={st} aria-hidden><i /><i /><i /></div>}
             <div className={`isl-row${st === 'expanded' ? ' tall' : ''}`}>
               {st === 'error' ? (
                 <>
